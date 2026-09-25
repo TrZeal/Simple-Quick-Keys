@@ -1,0 +1,15 @@
+# 构建产物
+.gradle/
+build/
+run/
+runs/
+out/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 系统
+.DS_Store
+Thumbs.db

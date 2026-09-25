@@ -1,0 +1,11 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+        maven { name = 'NeoForged'; url = 'https://maven.neoforged.net/releases' }
+        maven { name = 'NeoForgedMirror'; url = 'https://bmclapi2.bangbang93.com/maven/' }
+        maven { name = 'MinecraftForge'; url = 'https://maven.minecraftforge.net/' }
+    }
+}
+
+rootProject.name = 'key_panel'

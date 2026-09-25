@@ -1,0 +1,90 @@
+// key_panel —— NeoForge 1.21.1 (21.1.251)
+//
+// 两条构建路线（详见 BUILD-README.md）：
+//
+//   1) 默认 build.gradle（本文件）—— 对本地 libs/ 里的 jar 做 compileOnly 编译。
+//      · 可行原因：NeoForge 1.20.5 起运行期改用 Mojang 官方名，产物无需 reobf ✓
+//      · 命令：./gradlew build
+//
+//   2) build-moddev.gradle —— 官方 ModDevGradle 工具链，需要 maven.neoforged.net 可达。
+//      · 命令：./gradlew -b build-moddev.gradle build
+//
+// libs/ 里的内容：
+//   libs/minecraft-1.21.1-official.jar  官方 client.jar + 官方 ProGuard 映射重映射后的 MC（官方名）
+//   libs/neoforge-21.1.251-universal.jar NeoForge 本体
+//   libs/fancymodloader-loader-*.jar    FML（@Mod / FMLPaths / EventBusSubscriber）
+//   libs/bus-*.jar                      net.neoforged.bus 事件总线
+//   libs/mergetool-2.0.0-api.jar        含 net.neoforged.api.distmarker.Dist
+//   libs/mc/                            MC 的传递依赖（gson / guava / lwjgl / brigadier / joml …）
+
+plugins {
+    id 'java'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    // 本地 libs/ 已包含全部编译期依赖；这里只是给可选的在线解析留后路
+    maven { name = 'NeoForgedMirror'; url = 'https://bmclapi2.bangbang93.com/maven/' }
+    maven { name = 'MinecraftForge'; url = 'https://maven.minecraftforge.net/' }
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly fileTree(dir: 'libs', include: ['**/*.jar'])
+}
+
+// neoforge.mods.toml 里的 ${mod_version} 等占位符替换
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_group_id           : mod_group_id,
+            mod_authors            : mod_authors,
+            mod_description        : mod_description,
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : mod_name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+        ])
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << '-Xlint:deprecation'
+    options.compilerArgs << '-proc:none'   // libs/ 里的 jar 带注解处理器，关掉避免噪音
+}
+
+tasks.named('build') {
+    dependsOn 'jar'
+}

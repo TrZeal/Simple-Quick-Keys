@@ -1,0 +1,71 @@
+// 官方 ModDevGradle 工具链版构建脚本（需要 maven.neoforged.net 可达）
+//
+// 用法：./gradlew -b build-moddev.gradle build
+//
+// 为什么默认不用这个：ModDevGradle 会驱动 NeoForm Runtime (NFRT)，
+// 详见 BUILD-README.md。
+
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+neoForge {
+    version = neo_version
+
+    // 纯客户端模组：只跑 client 相关的 run（不需要 server/data）
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+repositories {
+    maven { name = 'NeoForgedMirror'; url = 'https://bmclapi2.bangbang93.com/maven/' }
+    mavenCentral()
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_group_id           : mod_group_id,
+            mod_authors            : mod_authors,
+            mod_description        : mod_description,
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/neoforge.mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

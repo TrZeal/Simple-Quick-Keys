@@ -1,0 +1,30 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="${mod_license}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="简易快捷键菜单 (SimpleQuickKeys)"
+description='''
+FTB 风格快捷功能面板：单快捷键（默认 G）呼出 3×9 格子面板，每格绑定一个逻辑快捷键并显示物品图标。
+纯客户端模组：只装在客户端即可，服务端无需安装。
+'''
+logoFile="icon.png"
+
+[[dependencies.${mod_id}]]
+    modId="neoforge"
+    type="required"
+    versionRange="${neo_version_range}"
+    ordering="NONE"
+    side="CLIENT"
+
+[[dependencies.${mod_id}]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="CLIENT"
+
+[[mixins]]
+    config="key_panel.mixins.json"
