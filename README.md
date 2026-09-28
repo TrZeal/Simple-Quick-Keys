@@ -45,7 +45,7 @@ Stored in `config/key_panel/slots.json` (created automatically the first time yo
 A: That slot is not configured yet — right-click it and choose an icon / key / command.
 
 **Q: A feature does nothing when I click it.**
-A: A very small number of features cannot be simulated (for example vanilla "screenshot", which only reacts to real key presses). Please report the mod or feature in the issue tracker.
+A: A very small number of features cannot be simulated. Please report the mod or feature in the issue tracker.
 
 **Q: My command did not run.**
 A: On multiplayer servers commands are limited by permissions (for example `gamemode` requires OP).
