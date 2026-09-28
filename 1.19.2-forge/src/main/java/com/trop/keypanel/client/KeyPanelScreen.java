@@ -73,6 +73,9 @@ public class KeyPanelScreen extends Screen {
     private int page;
     private boolean moveMode;
     private int moveSource = -1;
+    private int selectedSlot = -1;
+    private int sliderDrag = -1;
+    private static final int STRIP_H = 50;
     private boolean hoverPrev;
     private boolean hoverNext;
 
@@ -83,6 +86,10 @@ public class KeyPanelScreen extends Screen {
 
     @Override
     protected void init() {
+        relayout();
+    }
+
+    private void relayout() {
         applyTier();
         this.panelX = (this.width - panelW) / 2;
         this.panelY = (this.height - panelH) / 2;
@@ -109,7 +116,7 @@ public class KeyPanelScreen extends Screen {
     private void applyTier() {
         for (int[] t : TIERS) {
             int w = COLS * t[0] + (COLS - 1) * t[2] + t[3] * 2;
-            int h = ROWS * t[1] + (ROWS - 1) * t[2] + t[3] * 2 + PAGEBAR;
+            int h = ROWS * t[1] + (ROWS - 1) * t[2] + t[3] * 2 + PAGEBAR + (moveMode ? STRIP_H + 6 : 0);
             if (w <= this.width - 6 && h <= this.height - 6) {
                 cardW = t[0];
                 cardH = t[1];
@@ -128,7 +135,7 @@ public class KeyPanelScreen extends Screen {
         pad = t[3];
         applyTierFields(t);
         panelW = COLS * t[0] + (COLS - 1) * t[2] + t[3] * 2;
-        panelH = ROWS * t[1] + (ROWS - 1) * t[2] + t[3] * 2 + PAGEBAR;
+        panelH = ROWS * t[1] + (ROWS - 1) * t[2] + t[3] * 2 + PAGEBAR + (moveMode ? STRIP_H + 6 : 0);
     }
 
     @Override
@@ -151,6 +158,9 @@ public class KeyPanelScreen extends Screen {
         drawPanel(poseStack);
         drawCards(poseStack);
         drawPageBar(poseStack);
+        if (moveMode) {
+            drawColorStrip(poseStack);
+        }
 
         super.render(poseStack, mouseX, mouseY, partialTick);
         flush();
@@ -186,7 +196,12 @@ public class KeyPanelScreen extends Screen {
     }
 
     private String moveHint() {
-        return moveSource < 0 ? "移动模式：点一个槽位选中（再点按钮退出）" : "移动模式：再点一个槽位完成移动（右键取消）";
+        if (selectedSlot >= 0 && selectedSlot < slots.size()) {
+            int c = slots.get(selectedSlot).getColor();
+            String hex = c < 0 ? "默认" : String.format("#%06X", c);
+            return "edit：格 " + (selectedSlot + 1) + " · " + hex + "（拖滑块调色 · 点色块恢复默认 · 右键退出）";
+        }
+        return moveSource < 0 ? "edit：点两个格子互换 · 先点一个格子再拖滑块调色" : "edit：再点一个格子完成移动（右键取消）";
     }
 
     private void drawPanel(PoseStack poseStack) {
@@ -222,7 +237,17 @@ public class KeyPanelScreen extends Screen {
                 u = cardUNormal;
                 v = cardVNormal;
             }
+            int slotColor = data.getColor();
+            if (slotColor >= 0) {
+                RenderSystem.setShaderColor(((slotColor >> 16) & 0xFF) / 255.0F, ((slotColor >> 8) & 0xFF) / 255.0F, (slotColor & 0xFF) / 255.0F, 1.0F);
+            }
             blitTexture(poseStack, TEXTURE, x, drawY, cardW, cardH, u, v, cardW, cardH, TEX_W, TEX_H);
+            if (slotColor >= 0) {
+                RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            }
+            if (moveMode && slotIndex == selectedSlot) {
+                GuiCompat.outline(poseStack, x, drawY, cardW, cardH, 0xFFBFFFFF);
+            }
 
             if (empty) {
                 continue;
@@ -354,9 +379,103 @@ public class KeyPanelScreen extends Screen {
                 moveMode ? 0xFF8FF7F7 : COL_HINT);
         int[] mb = moveButtonRect();
         blitTexture(poseStack, TEXTURE, mb[0], mb[1], 84, 18, 700, moveMode ? 430 : 400, 84, 18, TEX_W, TEX_H);
-        String label = moveMode ? "移动中…" : "移动槽位";
+        String label = "edit";
         drawString(poseStack, this.font, label,
                 mb[0] + (84 - this.font.width(label)) / 2, mb[1] + 5, moveMode ? 0xFF3E8A8C : 0xFFBFFFFF);
+    }
+
+    private int stripTop() {
+        return panelY + panelH + 4;
+    }
+
+    private int sliderTrackX() {
+        return panelX + 30;
+    }
+
+    private int sliderTrackW() {
+        return panelW - 30 - 76;
+    }
+
+    private int[] previewRect() {
+        int x = panelX + panelW - 66;
+        return new int[]{x, stripTop() + 9, x + 48, stripTop() + 37};
+    }
+
+    private int sliderAt(double mx, double my) {
+        if (!moveMode) {
+            return -1;
+        }
+        int tx = sliderTrackX();
+        int tw = sliderTrackW();
+        int top = stripTop();
+        if (mx < tx - 6 || mx > tx + tw + 6) {
+            return -1;
+        }
+        for (int i = 0; i < 3; i++) {
+            int y = top + 9 + i * 11;
+            if (my >= y - 4 && my < y + 12) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void dragSlider(int which, double mx) {
+        if (selectedSlot < 0 || selectedSlot >= slots.size()) {
+            return;
+        }
+        int tx = sliderTrackX();
+        int tw = Math.max(2, sliderTrackW() - 1);
+        double t = Math.max(0.0D, Math.min(1.0D, (mx - tx) / (double) tw));
+        int val = (int) Math.round(t * 255.0D);
+        SlotData d = slots.get(selectedSlot);
+        int cur = d.getColor() < 0 ? 0xFFFFFF : d.getColor();
+        int shift = 16 - which * 8;
+        cur = (cur & ~(0xFF << shift)) | (val << shift);
+        d.setColor(cur & 0xFFFFFF);
+    }
+
+    private void drawColorStrip(PoseStack poseStack) {
+        int top = stripTop();
+        GuiCompat.fill(poseStack, panelX, top, panelX + panelW, top + STRIP_H, 0xE0060A0B);
+        GuiCompat.outline(poseStack, panelX, top, panelW, STRIP_H, 0xFF2FD9D9);
+        SlotData sel = (selectedSlot >= 0 && selectedSlot < slots.size()) ? slots.get(selectedSlot) : null;
+        int shown = (sel == null || sel.getColor() < 0) ? 0xFFFFFF : sel.getColor();
+        int tx = sliderTrackX();
+        int tw = sliderTrackW();
+        for (int i = 0; i < 3; i++) {
+            int y = top + 9 + i * 11;
+            int val = (shown >> (16 - i * 8)) & 0xFF;
+            String letter = i == 0 ? "R" : (i == 1 ? "G" : "B");
+            GuiCompat.drawString(poseStack, this.font, letter, tx - 14, y, sel == null ? 0xFF5A6A6A : 0xFFC6D6D6);
+            GuiCompat.fill(poseStack, tx, y, tx + tw, y + 8, 0xFF12262A);
+            int knob = tx + (tw - 1) * val / 255;
+            GuiCompat.fill(poseStack, knob - 2, y - 2, knob + 3, y + 10, sel == null ? 0xFF2A5A5A : 0xFF45F0F0);
+        }
+        int[] pr = previewRect();
+        GuiCompat.fill(poseStack, pr[0], pr[1], pr[2], pr[3], 0xFF000000 | shown);
+        GuiCompat.outline(poseStack, pr[0], pr[1], pr[2] - pr[0], pr[3] - pr[1], 0x662FD9D9);
+        String hex = sel == null ? "未选中格子" : (sel.getColor() < 0 ? "默认" : String.format("#%06X", shown));
+        GuiCompat.drawString(poseStack, this.font, hex, pr[0] + (48 - this.font.width(hex)) / 2, pr[3] + 3, 0xFF8FF7F7);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (sliderDrag >= 0) {
+            dragSlider(sliderDrag, mouseX);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (sliderDrag >= 0) {
+            sliderDrag = -1;
+            saveSlots();
+            return true;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     private int[] arrowRect(boolean left) {
@@ -447,8 +566,27 @@ public class KeyPanelScreen extends Screen {
         if (button == 0 && isOverMoveButton(mouseX, mouseY)) {
             moveMode = !moveMode;
             moveSource = -1;
-            KeyPanelMod.LOGGER.info("[key_panel] move mode = {}", moveMode);
+            selectedSlot = -1;
+            relayout();
+            KeyPanelMod.LOGGER.info("[key_panel] edit mode = {}", moveMode);
             return true;
+        }
+        if (moveMode) {
+            int which = sliderAt(mouseX, mouseY);
+            if (which >= 0) {
+                sliderDrag = which;
+                dragSlider(which, mouseX);
+                return true;
+            }
+            int[] pr = previewRect();
+            if (mouseX >= pr[0] && mouseX < pr[2] && mouseY >= pr[1] && mouseY < pr[3]) {
+                if (selectedSlot >= 0 && selectedSlot < slots.size()) {
+                    slots.get(selectedSlot).setColor(-1);
+                    saveSlots();
+                    KeyPanelMod.LOGGER.info("[key_panel] slot {} colour reset", selectedSlot);
+                }
+                return true;
+            }
         }
         int index = cardAt(mouseX, mouseY);
         if (moveMode && index >= 0) {
@@ -461,8 +599,10 @@ public class KeyPanelScreen extends Screen {
             if (slotIndex < slots.size()) {
                 if (moveSource < 0) {
                     moveSource = slotIndex;
+                    selectedSlot = slotIndex;
                 } else {
                     swapSlots(moveSource, slotIndex);
+                    selectedSlot = slotIndex;
                     moveSource = -1;
                 }
                 return true;

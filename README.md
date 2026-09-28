@@ -15,7 +15,7 @@
 - **Trigger anything**: click a slot to trigger it, no keybind required; hold-type actions such as sneaking or sprinting become toggles (the card turns cyan and shows an indicator bar)
 - **Commands**: each slot can hold one command (for example `home` or `gamemode creative`); it takes priority when set, with chat-style command completion while typing
 - **Independent virtual keys**: every slot has its own virtual key, so any feature (including ones from other mods) can be triggered from the panel — the answer to running out of keyboard keys
-- **Move slots**: the "Move slot" button at the bottom swaps the contents of two slots; keep clicking to move more, then click it again to exit
+- **Edit mode**: the `edit` button at the bottom lets you swap the contents of two slots (click two slots) and tint a slot's card background — click a slot, then drag the R / G / B sliders that appear below the panel (click the colour swatch to reset it)
 - **Tooltips**: hover a card to see its full name and how it is triggered
 - **Client-side only**: works in singleplayer and on servers, nothing to install on the server
 
@@ -33,7 +33,7 @@ In the edit dialog you can change the **item ID**, **name**, **keybind** and **c
 - "Choose key" = pick one of the game's features
 - "Clear slot" = empty the slot
 
-Use **`◀ 1/3 ▶`** at the bottom to turn pages, and **"Move slot"** to reorder slots.
+Use **`◀ 1/3 ▶`** at the bottom to turn pages. The **`edit`** button swaps two slots and tints a slot's background colour.
 
 ## Configuration
 

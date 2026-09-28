@@ -19,6 +19,10 @@ public class SlotData {
     @SerializedName("command")
     private String command = "";
 
+    /** 该格卡片的背景颜色（0xRRGGBB）；-1 表示使用默认（不着色）。 */
+    @SerializedName("color")
+    private int color = -1;
+
     public SlotData() {
         this(0, "", "", "");
     }
@@ -41,6 +45,14 @@ public class SlotData {
 
     public void setCommand(String command) {
         this.command = command == null ? "" : command;
+    }
+
+    public int getColor() {
+        return color;
+    }
+
+    public void setColor(int color) {
+        this.color = color;
     }
 
     public int getIndex() {
