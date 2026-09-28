@@ -16,7 +16,7 @@ public class KeyPanelEditScreen extends Screen {
     private static final int H = 158;
     private static final int PAD = 16;
     private static final net.minecraft.resources.ResourceLocation TEXTURE =
-            new net.minecraft.resources.ResourceLocation("key_panel", "textures/gui/key_panel.png");
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel.png");
     private static final int TEX_W = 1024;
     private static final int TEX_H = 1024;
     private static final int BG_U = 700;
@@ -40,7 +40,7 @@ public class KeyPanelEditScreen extends Screen {
     private int y0;
 
     public KeyPanelEditScreen(KeyPanelScreen parent, SlotData data) {
-        super(Component.literal("编辑格子"));
+        super(Component.translatable("key_panel.edit.screen"));
         this.parent = parent;
         this.data = data;
     }
@@ -50,25 +50,25 @@ public class KeyPanelEditScreen extends Screen {
         this.x0 = (this.width - W) / 2;
         this.y0 = (this.height - H) / 2;
 
-        this.itemBox = new EditBox(this.font, x0 + 74, y0 + 24, 118, 16, Component.literal("物品ID"));
+        this.itemBox = new EditBox(this.font, x0 + 74, y0 + 24, 118, 16, Component.translatable("key_panel.edit.item_id"));
         this.itemBox.setMaxLength(96);
         this.itemBox.setValue(data.getItemId() == null ? "" : data.getItemId());
         this.itemBox.setResponder(text -> data.setItemId(text));
         this.addRenderableWidget(this.itemBox);
 
-        this.nameBox = new EditBox(this.font, x0 + 74, y0 + 46, 178, 16, Component.literal("名称"));
+        this.nameBox = new EditBox(this.font, x0 + 74, y0 + 46, 178, 16, Component.translatable("key_panel.edit.name"));
         this.nameBox.setMaxLength(32);
         this.nameBox.setValue(data.getCustomName() == null ? "" : data.getCustomName());
         this.nameBox.setResponder(text -> data.setCustomName(text));
         this.addRenderableWidget(this.nameBox);
 
-        this.keyBox = new EditBox(this.font, x0 + 74, y0 + 68, 118, 16, Component.literal("逻辑按键ID"));
+        this.keyBox = new EditBox(this.font, x0 + 74, y0 + 68, 118, 16, Component.translatable("key_panel.edit.key_id"));
         this.keyBox.setMaxLength(64);
         this.keyBox.setValue(data.getKeyBinding() == null ? "" : data.getKeyBinding());
         this.keyBox.setResponder(text -> data.setKeyBinding(text));
         this.addRenderableWidget(this.keyBox);
 
-        this.cmdBox = new EditBox(this.font, x0 + 74, y0 + 90, 178, 16, Component.literal("快捷命令"));
+        this.cmdBox = new EditBox(this.font, x0 + 74, y0 + 90, 178, 16, Component.translatable("key_panel.edit.command"));
         this.cmdBox.setMaxLength(128);
         this.cmdBox.setValue(data.getCommand());
         this.cmdBox.setResponder(text -> {
@@ -79,19 +79,19 @@ public class KeyPanelEditScreen extends Screen {
 
         refreshSuggestions(this.cmdBox.getValue());
 
-        this.addRenderableWidget(new Button(x0 + 196, y0 + 23, 68, 18, Component.literal("选择图标"),
+        this.addRenderableWidget(new Button(x0 + 196, y0 + 23, 68, 18, Component.translatable("key_panel.edit.pick_item"),
                 b -> this.minecraft.setScreen(new ItemPickerScreen(this, data))));
-        this.addRenderableWidget(new Button(x0 + 196, y0 + 67, 68, 18, Component.literal("选择键位"),
+        this.addRenderableWidget(new Button(x0 + 196, y0 + 67, 68, 18, Component.translatable("key_panel.edit.pick_key"),
                 b -> this.minecraft.setScreen(new KeyPickerScreen(this, data))));
         int btnW = 76;
         int btnGap = 10;
         int btnTotal = btnW * 3 + btnGap * 2;
         int btnX = x0 + (W - btnTotal) / 2;
-        this.addRenderableWidget(new Button(btnX, y0 + 132, btnW, 18, Component.literal("清空格子"),
+        this.addRenderableWidget(new Button(btnX, y0 + 132, btnW, 18, Component.translatable("key_panel.edit.clear"),
                 b -> clearSlot()));
-        this.addRenderableWidget(new Button(btnX + btnW + btnGap, y0 + 132, btnW, 18, Component.literal("保存"),
+        this.addRenderableWidget(new Button(btnX + btnW + btnGap, y0 + 132, btnW, 18, Component.translatable("key_panel.edit.save"),
                 b -> save()));
-        this.addRenderableWidget(new Button(btnX + (btnW + btnGap) * 2, y0 + 132, btnW, 18, Component.literal("返回"),
+        this.addRenderableWidget(new Button(btnX + (btnW + btnGap) * 2, y0 + 132, btnW, 18, Component.translatable("key_panel.picker.back"),
                 b -> backToPanel()));
     }
 
@@ -180,12 +180,19 @@ public class KeyPanelEditScreen extends Screen {
 
         this.renderBackground(poseStack);
         blitTexture(poseStack, TEXTURE, x0 - PAD, y0 - PAD, BG_W, BG_H, BG_U, BG_V, BG_W, BG_H, TEX_W, TEX_H);
-        drawString(poseStack, this.font, "编辑格子 #" + (data.getIndex() + 1), x0 + 2, y0 + 2, 0xFFBFFFFF);
-        drawString(poseStack, this.font, "物品ID", x0 + 4, y0 + 28, 0xFFC6D6D6);
-        drawString(poseStack, this.font, "名称", x0 + 4, y0 + 50, 0xFFC6D6D6);
-        drawString(poseStack, this.font, "逻辑按键", x0 + 4, y0 + 72, 0xFFC6D6D6);
-        drawString(poseStack, this.font, "快捷命令", x0 + 4, y0 + 94, 0xFFC6D6D6);
-        drawString(poseStack, this.font, "例：minecraft:chest / key.inventory / home（命令优先）", x0 + 2, y0 + 112, 0xFF6FA8A8);
+        GuiCompat.drawString(poseStack, this.font,
+                Component.translatable("key_panel.edit.title", data.getIndex() + 1).getString(),
+                x0 + 2, y0 + 2, 0xFFBFFFFF);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.item_id").getString(),
+                x0 + 4, y0 + 28, 0xFFC6D6D6);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.name").getString(),
+                x0 + 4, y0 + 50, 0xFFC6D6D6);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.key").getString(),
+                x0 + 4, y0 + 72, 0xFFC6D6D6);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.command").getString(),
+                x0 + 4, y0 + 94, 0xFFC6D6D6);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.example").getString(),
+                x0 + 2, y0 + 112, 0xFF6FA8A8);
         super.render(poseStack, mouseX, mouseY, partialTick);
         flush();
         this.suggestionHover = -1;

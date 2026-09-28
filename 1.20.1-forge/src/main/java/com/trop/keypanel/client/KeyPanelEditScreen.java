@@ -36,7 +36,7 @@ public class KeyPanelEditScreen extends Screen {
     private int y0;
 
     public KeyPanelEditScreen(KeyPanelScreen parent, SlotData data) {
-        super(Component.literal("编辑格子"));
+        super(Component.translatable("key_panel.edit.screen"));
         this.parent = parent;
         this.data = data;
     }
@@ -46,25 +46,25 @@ public class KeyPanelEditScreen extends Screen {
         this.x0 = (this.width - W) / 2;
         this.y0 = (this.height - H) / 2;
 
-        this.itemBox = new EditBox(this.font, x0 + 74, y0 + 24, 118, 16, Component.literal("物品ID"));
+        this.itemBox = new EditBox(this.font, x0 + 74, y0 + 24, 118, 16, Component.translatable("key_panel.edit.item_id"));
         this.itemBox.setMaxLength(96);
         this.itemBox.setValue(data.getItemId() == null ? "" : data.getItemId());
         this.itemBox.setResponder(text -> data.setItemId(text));
         this.addRenderableWidget(this.itemBox);
 
-        this.nameBox = new EditBox(this.font, x0 + 74, y0 + 46, 178, 16, Component.literal("名称"));
+        this.nameBox = new EditBox(this.font, x0 + 74, y0 + 46, 178, 16, Component.translatable("key_panel.edit.name"));
         this.nameBox.setMaxLength(32);
         this.nameBox.setValue(data.getCustomName() == null ? "" : data.getCustomName());
         this.nameBox.setResponder(text -> data.setCustomName(text));
         this.addRenderableWidget(this.nameBox);
 
-        this.keyBox = new EditBox(this.font, x0 + 74, y0 + 68, 118, 16, Component.literal("逻辑按键ID"));
+        this.keyBox = new EditBox(this.font, x0 + 74, y0 + 68, 118, 16, Component.translatable("key_panel.edit.key_id"));
         this.keyBox.setMaxLength(64);
         this.keyBox.setValue(data.getKeyBinding() == null ? "" : data.getKeyBinding());
         this.keyBox.setResponder(text -> data.setKeyBinding(text));
         this.addRenderableWidget(this.keyBox);
 
-        this.cmdBox = new EditBox(this.font, x0 + 74, y0 + 90, 178, 16, Component.literal("快捷命令"));
+        this.cmdBox = new EditBox(this.font, x0 + 74, y0 + 90, 178, 16, Component.translatable("key_panel.edit.command"));
         this.cmdBox.setMaxLength(128);
         this.cmdBox.setValue(data.getCommand());
         this.cmdBox.setResponder(text -> {
@@ -75,21 +75,21 @@ public class KeyPanelEditScreen extends Screen {
 
         refreshSuggestions(this.cmdBox.getValue());
 
-        this.addRenderableWidget(Button.builder(Component.literal("选择图标"), b ->
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.edit.pick_item"), b ->
                         this.minecraft.setScreen(new ItemPickerScreen(this, data)))
                 .bounds(x0 + 196, y0 + 23, 68, 18).build());
-        this.addRenderableWidget(Button.builder(Component.literal("选择键位"), b ->
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.edit.pick_key"), b ->
                         this.minecraft.setScreen(new KeyPickerScreen(this, data)))
                 .bounds(x0 + 196, y0 + 67, 68, 18).build());
         int btnW = 76;
         int btnGap = 10;
         int btnTotal = btnW * 3 + btnGap * 2;
         int btnX = x0 + (W - btnTotal) / 2;
-        this.addRenderableWidget(Button.builder(Component.literal("清空格子"), b -> clearSlot())
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.edit.clear"), b -> clearSlot())
                 .bounds(btnX, y0 + 132, btnW, 18).build());
-        this.addRenderableWidget(Button.builder(Component.literal("保存"), b -> save())
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.edit.save"), b -> save())
                 .bounds(btnX + btnW + btnGap, y0 + 132, btnW, 18).build());
-        this.addRenderableWidget(Button.builder(Component.literal("返回"), b -> backToPanel())
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.picker.back"), b -> backToPanel())
                 .bounds(btnX + (btnW + btnGap) * 2, y0 + 132, btnW, 18).build());
     }
 
@@ -178,12 +178,15 @@ public class KeyPanelEditScreen extends Screen {
 
         this.renderBackground(g);
         g.blit(TEXTURE, x0 - PAD, y0 - PAD, BG_W, BG_H, BG_U, BG_V, BG_W, BG_H, TEX_W, TEX_H);
-        g.drawString(this.font, "编辑格子 #" + (data.getIndex() + 1), x0 + 2, y0 + 2, 0xFFBFFFFF, false);
-        g.drawString(this.font, "物品ID", x0 + 4, y0 + 28, 0xFFC6D6D6, false);
-        g.drawString(this.font, "名称", x0 + 4, y0 + 50, 0xFFC6D6D6, false);
-        g.drawString(this.font, "逻辑按键", x0 + 4, y0 + 72, 0xFFC6D6D6, false);
-        g.drawString(this.font, "快捷命令", x0 + 4, y0 + 94, 0xFFC6D6D6, false);
-        g.drawString(this.font, "例：minecraft:chest / key.inventory / home（命令优先）", x0 + 2, y0 + 112, 0xFF6FA8A8, false);
+        // 背景贴图里自带一条分隔线，正好从标题中间穿过；先在标题下压一块底色再写字
+        String title = Component.translatable("key_panel.edit.title", String.valueOf(data.getIndex() + 1)).getString();
+        g.fill(x0 - 2, y0, x0 + this.font.width(title) + 4, y0 + 10, 0xF00A0E0F);
+        g.drawString(this.font, title, x0 + 2, y0 + 2, 0xFFBFFFFF, false);
+        g.drawString(this.font, Component.translatable("key_panel.edit.item_id").getString(), x0 + 4, y0 + 28, 0xFFC6D6D6, false);
+        g.drawString(this.font, Component.translatable("key_panel.edit.name").getString(), x0 + 4, y0 + 50, 0xFFC6D6D6, false);
+        g.drawString(this.font, Component.translatable("key_panel.edit.key").getString(), x0 + 4, y0 + 72, 0xFFC6D6D6, false);
+        g.drawString(this.font, Component.translatable("key_panel.edit.command").getString(), x0 + 4, y0 + 94, 0xFFC6D6D6, false);
+        g.drawString(this.font, Component.translatable("key_panel.edit.example").getString(), x0 + 2, y0 + 112, 0xFF6FA8A8, false);
         super.render(g, mouseX, mouseY, partialTick);
         g.flush();
         this.suggestionHover = -1;

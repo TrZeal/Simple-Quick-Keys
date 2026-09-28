@@ -44,7 +44,7 @@ public class ItemPickerScreen extends Screen {
     private int hovered = -1;
 
     public ItemPickerScreen(Screen parent, SlotData data) {
-        super(Component.literal("选择图标"));
+        super(Component.translatable("key_panel.item.screen"));
         this.parent = parent;
         this.data = data;
     }
@@ -64,7 +64,7 @@ public class ItemPickerScreen extends Screen {
         this.panelX = (this.width - (gridW + 24)) / 2;
         this.panelY = (this.height - (gridH + 92)) / 2;
 
-        this.search = new EditBox(this.font, panelX + 12, panelY + 24, gridW, 16, Component.literal("搜索"));
+        this.search = new EditBox(this.font, panelX + 12, panelY + 24, gridW, 16, Component.translatable("key_panel.item.search"));
         this.search.setMaxLength(48);
         this.search.setResponder(s -> {
             this.scroll = 0;
@@ -75,7 +75,7 @@ public class ItemPickerScreen extends Screen {
         applyFilter("");
 
         this.addRenderableWidget(new Button(panelX + gridW / 2 - 30 + 12, panelY + gridH + 66, 60, 18,
-                Component.literal("返回"), b -> back()));
+                Component.translatable("key_panel.picker.back"), b -> back()));
     }
 
     private void applyFilter(String query) {
@@ -108,7 +108,8 @@ public class ItemPickerScreen extends Screen {
         this.renderBackground(poseStack);
         fill(poseStack, panelX, panelY, panelX + gridW + 24, panelY + gridH + 92, 0xF0060A0B);
         outline(poseStack, panelX, panelY, gridW + 24, gridH + 92, 0xFF2FD9D9);
-        drawString(poseStack, this.font, "选择图标（点击即选中）", panelX + 12, panelY + 10, 0xFFBFFFFF);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.item.title").getString(),
+                panelX + 12, panelY + 10, 0xFFBFFFFF);
         fill(poseStack, panelX + 12, panelY + 46, panelX + 12 + gridW, panelY + 46 + gridH, 0xFF0A0E0F);
 
         this.hovered = -1;
@@ -139,7 +140,8 @@ public class ItemPickerScreen extends Screen {
             fill(poseStack, barX, barY, barX + 6, barY + barH, 0xFF45F0F0);
         }
         super.render(poseStack, mouseX, mouseY, partialTick);
-        drawHint(poseStack, this.font, this.search, "输入关键词搜索物品…");
+        drawHint(poseStack, this.font, this.search,
+                Component.translatable("key_panel.item.search_hint").getString());
         flush();
 
         poseStack.pushPose();
@@ -153,8 +155,8 @@ public class ItemPickerScreen extends Screen {
             int ty = mouseY + 10;
             fill(poseStack, tx, ty, tx + w, ty + 22, 0xF0060A0B);
             outline(poseStack, tx, ty, w, 22, 0xFF45F0F0);
-            drawString(poseStack, this.font, name, tx + 4, ty + 3, 0xFFFFFFFF);
-            drawString(poseStack, this.font, id, tx + 4, ty + 13, 0xFF7FD8D8);
+            GuiCompat.drawString(poseStack, this.font, name, tx + 4, ty + 3, 0xFFFFFFFF);
+            GuiCompat.drawString(poseStack, this.font, id, tx + 4, ty + 13, 0xFF7FD8D8);
         }
         poseStack.popPose();
     }

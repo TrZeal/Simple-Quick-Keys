@@ -35,7 +35,7 @@ public class KeyPickerScreen extends Screen {
     private boolean draggingBar;
 
     public KeyPickerScreen(Screen parent, SlotData data) {
-        super(Component.literal("选择逻辑按键"));
+        super(Component.translatable("key_panel.key.screen"));
         this.parent = parent;
         this.data = data;
     }
@@ -50,7 +50,7 @@ public class KeyPickerScreen extends Screen {
         this.panelX = (this.width - (LIST_W + 24)) / 2;
         this.panelY = (this.height - (ROWS * ROW_H + 76)) / 2;
 
-        this.search = new EditBox(this.font, panelX + 12, panelY + 26, LIST_W, 16, Component.literal("搜索"));
+        this.search = new EditBox(this.font, panelX + 12, panelY + 26, LIST_W, 16, Component.translatable("key_panel.key.search"));
         this.search.setMaxLength(48);
         this.search.setResponder(s -> {
             this.scroll = 0;
@@ -61,7 +61,7 @@ public class KeyPickerScreen extends Screen {
         applyFilter("");
 
         this.addRenderableWidget(new Button(panelX + 12 + LIST_W / 2 - 30, panelY + ROWS * ROW_H + 44, 60, 18,
-                Component.literal("返回"), b -> back()));
+                Component.translatable("key_panel.picker.back"), b -> back()));
     }
 
     private void applyFilter(String query) {
@@ -112,7 +112,8 @@ public class KeyPickerScreen extends Screen {
         int totalH = ROWS * ROW_H + 76;
         fill(poseStack, panelX, panelY, panelX + totalW, panelY + totalH, 0xF0060A0B);
         outline(poseStack, panelX, panelY, totalW, totalH, 0xFF2FD9D9);
-        drawString(poseStack, this.font, "点击一个功能，填入正在编辑的格子", panelX + 12, panelY + 10, 0xFFBFFFFF);
+        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.key.title").getString(),
+                panelX + 12, panelY + 10, 0xFFBFFFFF);
 
         this.hovered = -1;
         for (int i = 0; i < ROWS; i++) {
@@ -131,10 +132,10 @@ public class KeyPickerScreen extends Screen {
             } else if ((i & 1) == 1) {
                 fill(poseStack, panelX + 12, y, panelX + 12 + LIST_W, y + ROW_H, 0x33000000);
             }
-            drawString(poseStack, this.font, Component.translatable(mapping.getName()).getString(),
+            GuiCompat.drawString(poseStack, this.font, Component.translatable(mapping.getName()).getString(),
                     panelX + 18, y + 4, 0xFFC6D6D6);
             String keyName = mapping.getTranslatedKeyMessage().getString();
-            drawString(poseStack, this.font, keyName, panelX + 12 + LIST_W - this.font.width(keyName) - 6,
+            GuiCompat.drawString(poseStack, this.font, keyName, panelX + 12 + LIST_W - this.font.width(keyName) - 6,
                     y + 4, 0xFF8FF7F7);
         }
         if (filtered.size() > ROWS) {
@@ -145,7 +146,8 @@ public class KeyPickerScreen extends Screen {
             fill(poseStack, panelX + 12 + LIST_W + 3, barY, panelX + 12 + LIST_W + 6, barY + barH, 0xFF45F0F0);
         }
         super.render(poseStack, mouseX, mouseY, partialTick);
-        drawHint(poseStack, this.font, this.search, "搜索功能（名称或按键）…");
+        drawHint(poseStack, this.font, this.search,
+                Component.translatable("key_panel.key.search_hint").getString());
     }
 
     @Override

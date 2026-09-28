@@ -59,4 +59,16 @@ final class KeyCompat {
             return false;
         }
     }
+
+    static void setKeyModifierAndCode(KeyMapping mapping, net.minecraftforge.client.settings.KeyModifier modifier,
+                                      com.mojang.blaze3d.platform.InputConstants.Key key) {
+        if (mapping == null) {
+            return;
+        }
+        try {
+            mapping.setKeyModifierAndCode(modifier, key);
+        } catch (Throwable t) {
+            mapping.setKey(key);
+        }
+    }
 }

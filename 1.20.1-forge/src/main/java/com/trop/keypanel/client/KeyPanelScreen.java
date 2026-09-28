@@ -17,18 +17,31 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
+/**
+ * 快捷功能面板主界面（1.1 外观）。
+ * <p>
+ * 底与边框统一走 {@link PanelFrame}（16:9 面板 + 切角），格子/面板颜色与背景图由
+ * {@link PanelStyle} 提供；edit 态左三按钮「格子 / 背景 / 图片」+ 右四行 R/G/B/A 滑块
+ * 与方形色块复位。
+ * <p>
+ * 1.20.1 实测差异（本类相关）：
+ * <ul>
+ *   <li>{@code Screen#renderBackground} 只有 1 参 {@code renderBackground(GuiGraphics)}（4 参是 1.20.2+）</li>
+ *   <li>{@code mouseScrolled} 是 3 参 {@code (double,double,double)}（4 参是 1.20.2+）</li>
+ *   <li>{@code GuiGraphics#blit} 与 {@code renderOutline}、{@code pose()}、{@code flush()} 与 1.21.1 同名同参</li>
+ *   <li>{@code ResourceLocation} 用 1.20.1 工程既有的 {@code new ResourceLocation(...)} 写法</li>
+ * </ul>
+ * 原有 1.20.1 的按键触发逻辑（虚拟键 163~243、临时改绑、{@code removed()} 兜底、
+ * SRG 兼容反射）原样保留。
+ */
 public class KeyPanelScreen extends Screen {
 
-    private static final ResourceLocation TEXTURE =
-            new ResourceLocation("key_panel", "textures/gui/key_panel.png");
-    private static final int TEX_W = 1024;
-    private static final int TEX_H = 1024;
-    private int cardUNormal;
-    private int cardUEmpty;
-    private int cardUHover;
-    private int cardVNormal;
-    private int cardVEmpty;
-    private int cardVHover;
+    private static final ResourceLocation TEX2 =
+            new ResourceLocation("key_panel", "textures/gui/key_panel_v2.png");
+    private static final int TEX2_W = 512;
+    private static final int TEX2_H = 512;
+    private static final int[] CARD_X = {0, 50, 92};
+    private int tierIndex;
 
     private static final int COLS = 9;
     private static final int ROWS = 3;
@@ -42,19 +55,13 @@ public class KeyPanelScreen extends Screen {
     private int cardW = TIERS[0][0];
     private int cardH = TIERS[0][1];
     private int gap = TIERS[0][2];
-    private int pad = TIERS[0][3];
+    private int gapX = TIERS[0][2];
+    private int gapY = TIERS[0][2];
     private int iconScale = TIERS[0][4];
-    private int panelU;
-    private int panelV;
     private int panelW;
     private int panelH;
-    private static final int CORNER = 12;
 
-    private static final int COL_BG_TOP    = 0xFF0A0E0F;
-    private static final int COL_BG_BOTTOM = 0xFF040607;
     private static final int COL_EDGE      = 0xCC2FD9D9;
-    private static final int COL_EDGE_DIM  = 0x552FD9D9;
-    private static final int COL_ARC       = 0xFF8FF7F7;
     private static final int COL_NAME      = 0xFFC6D6D6;
     private static final int COL_NAME_HOVER = 0xFFBFFFFF;
     private static final int COL_HINT      = 0x7786B8B8;
@@ -70,13 +77,16 @@ public class KeyPanelScreen extends Screen {
     private int moveSource = -1;
     private int selectedSlot = -1;
     private int sliderDrag = -1;
-    private static final int STRIP_H = 50;
+    private boolean alphaMigrated;
+    private boolean bgTarget;
+    private static final int STRIP_H = 96;
     private boolean hoverPrev;
     private boolean hoverNext;
 
     public KeyPanelScreen() {
         super(Component.empty());
         this.slots = ConfigManager.load();
+        PanelStyle.load();
     }
 
     @Override
@@ -84,42 +94,61 @@ public class KeyPanelScreen extends Screen {
         relayout();
     }
 
+    /** 旧配置兼容（只做一次）：颜色只存了 0xRRGGBB 时 alpha 是 0，按不透明补上。 */
+    private void migrateAlphaOnce() {
+        boolean changed = false;
+        for (SlotData d : slots) {
+            int c = d.getColor();
+            if (c != -1 && (c >>> 24) == 0) {
+                d.setColor(c | 0xFF000000);
+                changed = true;
+            }
+        }
+        if (PanelStyle.color() != -1 && (PanelStyle.color() >>> 24) == 0) {
+            PanelStyle.setColor(PanelStyle.color() | 0xFF000000);
+        }
+        if (changed) {
+            saveSlots();
+        }
+    }
+
     private void relayout() {
         applyTier();
+        // 网格铺满可用区域：间距按剩余空间摊开，不再留大片空边
+        gapX = Math.max(gap, (panelW - 2 * (PanelFrame.PAD + GRID_PAD) - COLS * cardW) / (COLS - 1));
+        gapY = Math.max(gap, (contentBottom() - contentTop() - ROWS * cardH) / (ROWS - 1));
+        int totalH = panelH + (moveMode ? STRIP_H + 8 : 0);
         this.panelX = (this.width - panelW) / 2;
-        this.panelY = (this.height - panelH) / 2;
-        this.gridX = this.panelX + pad;
-        this.gridY = this.panelY + pad;
+        this.panelY = (this.height - totalH) / 2;
+        this.gridX = gridOriginX();
+        this.gridY = gridOriginY();
     }
 
     private void applyTierFields(int[] t) {
         cardW = t[0];
         cardH = t[1];
         gap = t[2];
-        pad = t[3];
         iconScale = t[4];
-        panelU = t[5];
-        panelV = t[6];
-        cardUNormal = t[7];
-        cardVNormal = t[8];
-        cardUHover = t[9];
-        cardVHover = t[10];
-        cardUEmpty = t[11];
-        cardVEmpty = t[12];
     }
 
     private void applyTier() {
         for (int[] t : TIERS) {
-            int w = COLS * t[0] + (COLS - 1) * t[2] + t[3] * 2;
-            int h = ROWS * t[1] + (ROWS - 1) * t[2] + t[3] * 2 + PAGEBAR + (moveMode ? STRIP_H + 6 : 0);
-            if (w <= this.width - 6 && h <= this.height - 6) {
+            int gw = COLS * t[0] + (COLS - 1) * t[2];
+            int gh = ROWS * t[1] + (ROWS - 1) * t[2];
+            int[] size = panelSizeFor(gw, gh, moveMode);
+            if (size[0] <= this.width - 6 && size[1] + (moveMode ? STRIP_H + 10 : 0) <= this.height - 6) {
                 cardW = t[0];
                 cardH = t[1];
                 gap = t[2];
-                pad = t[3];
                 applyTierFields(t);
-                panelW = w;
-                panelH = h;
+                tierIndex = 0;
+                for (int k = 0; k < TIERS.length; k++) {
+                    if (TIERS[k] == t) {
+                        tierIndex = k;
+                    }
+                }
+                panelW = size[0];
+                panelH = size[1];
                 return;
             }
         }
@@ -127,17 +156,68 @@ public class KeyPanelScreen extends Screen {
         cardW = t[0];
         cardH = t[1];
         gap = t[2];
-        pad = t[3];
         applyTierFields(t);
-        panelW = COLS * t[0] + (COLS - 1) * t[2] + t[3] * 2;
-        panelH = ROWS * t[1] + (ROWS - 1) * t[2] + t[3] * 2 + PAGEBAR + (moveMode ? STRIP_H + 6 : 0);
+        tierIndex = TIERS.length - 1;
+        int gw = COLS * t[0] + (COLS - 1) * t[2];
+        int gh = ROWS * t[1] + (ROWS - 1) * t[2];
+        int[] size = panelSizeFor(gw, gh, moveMode);
+        panelW = size[0];
+        panelH = size[1];
+    }
+
+    private static int[] panelSizeFor(int gridW, int gridH, boolean edit) {
+        int needW = gridW + 28 + 20;                                 // 左右边框各 14 + 网格两侧各留 10
+        // 纵向：边框 14 + 网格上边距 10 + 网格 + 8 + 提示文字 20 + 6 + 页码条 22 + 边框 14
+        int needH = gridH + 14 + 10 + 8 + PAGEBAR + 14;
+        int w = needW;
+        int h = needH;
+        if (w * 9 >= h * 16) {
+            h = (int) Math.ceil(w * 9.0D / 16.0D);
+        } else {
+            w = (int) Math.ceil(h * 16.0D / 9.0D);
+        }
+        return new int[]{Math.max(w, needW), Math.max(h, needH)};
+    }
+
+    private static final int GRID_PAD = 10;
+
+    private int gridOriginX() {
+        return panelX + PanelFrame.PAD + GRID_PAD;
+    }
+
+    /** 网格可用区域的上下边界（避开边框与提示条/控制条）。 */
+    private int contentTop() {
+        return panelY + PanelFrame.PAD + GRID_PAD;
+    }
+
+    private int pageBarTop() {
+        return panelY + panelH - PanelFrame.PAD - PAGEBAR;
+    }
+
+    private int contentBottom() {
+        return pageBarTop() - 8;
+    }
+
+    private int gridOriginY() {
+        int gridH = ROWS * cardH + (ROWS - 1) * gapY;
+        int top = contentTop();
+        int bottom = contentBottom();
+        return top + Math.max(0, (bottom - top - gridH) / 2);
+    }
+
+    /**
+     * 本模组界面自己画背景：1.20.1 的原版实现会铺一层纵向暗化渐变
+     * （{@code fillGradient}，有世界时）或泥土背景（无世界时），
+     * 会把身后压暗并与 1.1 的观感不一致，这里整块跳过。
+     */
+    @Override
+    public void renderBackground(GuiGraphics g) {
     }
 
     @Override
     public boolean isPauseScreen() {
         return false;
     }
-
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
@@ -150,6 +230,26 @@ public class KeyPanelScreen extends Screen {
         this.hoverPrev = mouseX >= lp[0] && mouseX < lp[2] && mouseY >= lp[1] && mouseY < lp[3];
         this.hoverNext = mouseX >= rp[0] && mouseX < rp[2] && mouseY >= rp[1] && mouseY < rp[3];
 
+        if (!alphaMigrated) {
+            alphaMigrated = true;
+            migrateAlphaOnce();
+        }
+        // 每帧自己跟一次拖动：mouseDragged 事件可能中途断掉（拖到一半停住就是这个原因），
+        // 这里用当前鼠标位置继续调，松手当帧自动收尾。
+        if (sliderDrag >= 0) {
+            long win = Minecraft.getInstance().getWindow().getWindow();
+            if (org.lwjgl.glfw.GLFW.glfwGetMouseButton(win, org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS) {
+                dragSlider(sliderDrag, mouseX);
+            } else {
+                sliderDrag = -1;
+                saveSlots();
+                PanelStyle.save();
+            }
+        }
+        // 半透明贴图必须自己把混合函数设回标准值：只 enableBlend 不够，
+        // 别的绘制可能把 blendFunc 留成 ONE/ZERO，那样贴图 alpha 会被当成不透明（黑块）。
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
         drawPanel(g);
         drawCards(g);
         drawPageBar(g);
@@ -163,9 +263,8 @@ public class KeyPanelScreen extends Screen {
         g.pose().translate(0.0F, 0.0F, 400.0F);
         drawHoverTip(g, mouseX, mouseY);
         g.pose().popPose();
-        RenderSystem.disableBlend();
+        RenderSystem.enableBlend();   // 半透明贴图（卡片/背景图）必须保持混合开启，关掉会被画成不透明
     }
-
 
     private int[] moveButtonRect() {
         return new int[]{panelX + 44, panelY + panelH - PAGEBAR + 2, panelX + 44 + 84, panelY + panelH - PAGEBAR + 20};
@@ -191,17 +290,21 @@ public class KeyPanelScreen extends Screen {
     }
 
     private String moveHint() {
+        if (bgTarget) {
+            int c = PanelStyle.color();
+            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default_look").getString() : String.format("#%08X", c);
+            return Component.translatable("key_panel.panel.hint.bg", hex).getString();
+        }
         if (selectedSlot >= 0 && selectedSlot < slots.size()) {
             int c = slots.get(selectedSlot).getColor();
-            String hex = c < 0 ? "默认" : String.format("#%06X", c);
-            return "edit：格 " + (selectedSlot + 1) + " · " + hex + "（拖滑块调色 · 点色块恢复默认 · 右键退出）";
+            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default").getString() : String.format("#%08X", c);
+            return Component.translatable("key_panel.panel.hint.slot", String.valueOf(selectedSlot + 1), hex).getString();
         }
-        return moveSource < 0 ? "edit：点两个格子互换 · 先点一个格子再拖滑块调色" : "edit：再点一个格子完成移动（右键取消）";
+        return moveSource < 0 ? Component.translatable("key_panel.panel.hint.edit").getString() : Component.translatable("key_panel.panel.hint.move").getString();
     }
 
     private void drawPanel(GuiGraphics g) {
-        g.blit(TEXTURE, panelX, panelY, panelW, panelH,
-                panelU, panelV, panelW, panelH, TEX_W, TEX_H);
+        drawPanelBackground(g);
     }
 
     private void drawCards(GuiGraphics g) {
@@ -213,35 +316,29 @@ public class KeyPanelScreen extends Screen {
             SlotData data = slots.get(slotIndex);
             int col = i % COLS;
             int row = i / COLS;
-            int x = gridX + col * (cardW + gap);
-            int y = gridY + row * (cardH + gap);
+            int x = gridX + col * (cardW + gapX);
+            int y = gridY + row * (cardH + gapY);
             boolean hover = i == hovered;
             boolean active = isActiveToggle(data);
             boolean empty = data.isEmpty();
             int drawY = (hover && !empty) ? y - 1 : y;
 
-            int u;
-            int v;
-            if (empty && !active) {
-                u = cardUEmpty;
-                v = cardVEmpty;
-            } else if (hover || active) {
-                u = cardUHover;
-                v = cardVHover;
-            } else {
-                u = cardUNormal;
-                v = cardVNormal;
-            }
             int slotColor = data.getColor();
-            if (slotColor >= 0) {
-                g.setColor(((slotColor >> 16) & 0xFF) / 255.0F, ((slotColor >> 8) & 0xFF) / 255.0F, (slotColor & 0xFF) / 255.0F, 1.0F);
+            int cardV = (empty && !active) ? 60 : ((hover || active) ? 114 : 2);
+            // 底色用代码画（g.fill 的半透明是好的），图集只负责描边：
+            // 贴图自带的 alpha 在某些渲染状态下会被当成不透明，画出来就是一块黑。
+            // 格子自己带足够厚的底色：无论面板是深色、浅色还是壁纸，格子都保持自己的样子
+            int cardFill = empty ? 0x660A1214 : 0x7A0D181A;
+            if (hover || active) {
+                cardFill = 0x9A17485A;
             }
-            g.blit(TEXTURE, x, drawY, cardW, cardH, u, v, cardW, cardH, TEX_W, TEX_H);
-            if (slotColor >= 0) {
-                g.setColor(1.0F, 1.0F, 1.0F, 1.0F);
+            if (!moveMode && slotColor != -1) {
+                cardFill = slotColor;
             }
+            PanelFrame.fillChamfered(g, x, drawY, cardW, cardH, 4, cardFill);
+            g.blit(TEX2, x, drawY, cardW, cardH, CARD_X[Math.min(tierIndex, 2)], cardV, cardW, cardH, TEX2_W, TEX2_H);
             if (moveMode && slotIndex == selectedSlot) {
-                g.renderOutline(x, drawY, cardW, cardH, 0xFFBFFFFF);
+                g.renderOutline(x - 1, drawY - 1, cardW + 2, cardH + 2, 0xFFBFFFFF);
             }
 
             if (empty) {
@@ -310,7 +407,7 @@ public class KeyPanelScreen extends Screen {
         restoreVirtualHolder();
         virtualHolderOriginal = mapping.getKey();
         virtualHolder = mapping;
-        mapping.setKeyModifierAndCode(KeyModifier.NONE, virtual.getKey());
+        KeyCompat.setKeyModifierAndCode(mapping, KeyModifier.NONE, virtual.getKey());
         mapping.setDown(false);
         KeyMapping.resetMapping();
         return true;
@@ -347,11 +444,12 @@ public class KeyPanelScreen extends Screen {
         }
         String how;
         if (!data.getCommand().isEmpty()) {
-            how = "命令：" + data.getCommand();
+            how = Component.translatable("key_panel.panel.tip.command", data.getCommand()).getString();
         } else if (data.getKeyBinding() == null || data.getKeyBinding().isEmpty()) {
-            how = "未绑定功能";
+            how = Component.translatable("key_panel.panel.tip.unbound").getString();
         } else {
-            how = "功能：" + Component.translatable(data.getKeyBinding()).getString();
+            how = Component.translatable("key_panel.panel.tip.function",
+                    Component.translatable(data.getKeyBinding()).getString()).getString();
         }
         int w = Math.max(this.font.width(name), this.font.width(how)) + 10;
         int h = 24;
@@ -372,33 +470,88 @@ public class KeyPanelScreen extends Screen {
         arrow(g, panelX + 30, cy, true, canPrev ? (hoverPrev ? 0xFF8FF7F7 : COL_EDGE) : 0x33FFFFFF);
         boolean canNext = page < pages - 1;
         arrow(g, panelX + panelW - 30, cy, false, canNext ? (hoverNext ? 0xFF8FF7F7 : COL_EDGE) : 0x33FFFFFF);
-        String txt = moveMode ? moveHint() : ((page + 1) + " / " + pages);
+        String txt = (page + 1) + " / " + pages;   // edit 模式下提示语只在提示条显示，避免与 edit 按钮叠字
         g.drawString(this.font, txt, panelX + (panelW - this.font.width(txt)) / 2, cy - 4,
                 moveMode ? 0xFF8FF7F7 : COL_HINT, false);
         int[] mb = moveButtonRect();
-        g.blit(TEXTURE, mb[0], mb[1], 84, 18, 700, moveMode ? 430 : 400, 84, 18, TEX_W, TEX_H);
-        String label = "edit";
+        g.blit(TEX2, mb[0], mb[1], 84, 18, moveMode ? 100 : 0, 240, 96, 20, TEX2_W, TEX2_H);
+        String label = Component.translatable("key_panel.panel.edit").getString();
         g.drawString(this.font, label, mb[0] + (84 - this.font.width(label)) / 2, mb[1] + 5,
                 moveMode ? 0xFF3E8A8C : 0xFFBFFFFF, false);
     }
 
+    private void drawPanelBackground(GuiGraphics g) {
+        // 统一走 PanelFrame：底色/壁纸按切角裁，和背景选择界面、附属卡片同一套逻辑
+        PanelFrame.drawBackground(g, panelX, panelY, panelW, panelH,
+                PanelStyle.color() != -1 ? PanelStyle.color() : 0xB00A0E0F);
+    }
+
+    private int targetColor() {
+        if (bgTarget) {
+            return PanelStyle.color();
+        }
+        // 「格子」现在一次管全部格子：所有格子颜色一致就返回它，否则用第一格的值显示
+        if (slots.isEmpty()) {
+            return -1;
+        }
+        int first = slots.get(0).getColor();
+        for (SlotData d : slots) {
+            if (d.getColor() != first) {
+                return first;
+            }
+        }
+        return first;
+    }
+
+    private void setTargetColor(int rgb) {
+        if (bgTarget) {
+            PanelStyle.setColor(rgb);
+        } else {
+            for (SlotData d : slots) {
+                d.setColor(rgb);
+            }
+        }
+    }
+
+    private int[] targetButtonRect(int i) {
+        int top = stripTop();
+        int w = 64;
+        int x = panelX + 16;
+        int y = top + 11 + i * 26;
+        return new int[]{x, y, x + w, y + 22};
+    }
+
+    private int targetButtonAt(double mx, double my) {
+        if (!moveMode) {
+            return -1;
+        }
+        for (int i = 0; i < 3; i++) {
+            int[] r = targetButtonRect(i);
+            if (mx >= r[0] && mx < r[2] && my >= r[1] && my < r[3]) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     private int stripTop() {
-        return panelY + panelH + 4;
+        return panelY + panelH + 8;
     }
 
     private int sliderTrackX() {
-        return panelX + 30;
+        return panelX + 96;
     }
 
     private int sliderTrackW() {
-        return panelW - 30 - 76;
+        return panelW - 96 - 150;
     }
 
     private int[] previewRect() {
-        int x = panelX + panelW - 66;
-        return new int[]{x, stripTop() + 9, x + 48, stripTop() + 37};
+        int x = panelX + panelW - 96;
+        return new int[]{x, stripTop() + 16, x + 64, stripTop() + 80};
     }
 
+    /** 命中检测与绘制共用同一行公式 {@code top + 14 + i * 20}，两边不会错位。 */
     private int sliderAt(double mx, double my) {
         if (!moveMode) {
             return -1;
@@ -406,12 +559,12 @@ public class KeyPanelScreen extends Screen {
         int tx = sliderTrackX();
         int tw = sliderTrackW();
         int top = stripTop();
-        if (mx < tx - 6 || mx > tx + tw + 6) {
+        if (mx < tx - 8 || mx > tx + tw + 8) {
             return -1;
         }
-        for (int i = 0; i < 3; i++) {
-            int y = top + 9 + i * 11;
-            if (my >= y - 4 && my < y + 12) {
+        for (int i = 0; i < 4; i++) {
+            int y = top + 14 + i * 20;
+            if (my >= y - 7 && my < y + 15) {
                 return i;
             }
         }
@@ -419,42 +572,60 @@ public class KeyPanelScreen extends Screen {
     }
 
     private void dragSlider(int which, double mx) {
-        if (selectedSlot < 0 || selectedSlot >= slots.size()) {
+        if (!bgTarget && slots.isEmpty()) {
             return;
         }
         int tx = sliderTrackX();
         int tw = Math.max(2, sliderTrackW() - 1);
         double t = Math.max(0.0D, Math.min(1.0D, (mx - tx) / (double) tw));
         int val = (int) Math.round(t * 255.0D);
-        SlotData d = slots.get(selectedSlot);
-        int cur = d.getColor() < 0 ? 0xFFFFFF : d.getColor();
-        int shift = 16 - which * 8;
-        cur = (cur & ~(0xFF << shift)) | (val << shift);
-        d.setColor(cur & 0xFFFFFF);
+        int tc = targetColor();
+        int cur = tc == -1 ? (bgTarget ? 0xB00A0E0F : 0x7A0D181A) : tc;
+        if (which == 3) {
+            // 左=透明、右=不透明
+            // 最左写 1 而不是 0：0 专门留给「旧配置没写 alpha」，否则下次开面板会被迁移成不透明
+            cur = (cur & 0x00FFFFFF) | (Math.max(1, val) << 24);
+        } else {
+            int shift = 16 - which * 8;
+            cur = (cur & ~(0xFF << shift)) | (val << shift);
+        }
+        setTargetColor(cur);   // 不能再 & 0xFFFFFF：那会把刚拖出来的透明度抹掉
     }
 
     private void drawColorStrip(GuiGraphics g) {
         int top = stripTop();
-        g.fill(panelX, top, panelX + panelW, top + STRIP_H, 0xE0060A0B);
-        g.renderOutline(panelX, top, panelW, STRIP_H, 0xFF2FD9D9);
-        SlotData sel = (selectedSlot >= 0 && selectedSlot < slots.size()) ? slots.get(selectedSlot) : null;
-        int shown = (sel == null || sel.getColor() < 0) ? 0xFFFFFF : sel.getColor();
+        PanelFrame.fillChamfered(g, panelX, top, panelW, STRIP_H, 6, 0xB00A1214);
+        PanelFrame.draw(g, panelX, top, panelW, STRIP_H);
+
+        String[] names = {Component.translatable("key_panel.panel.target.slot").getString(), Component.translatable("key_panel.panel.target.bg").getString(), Component.translatable("key_panel.panel.target.image").getString()};
+        for (int i = 0; i < 3; i++) {
+            int[] r = targetButtonRect(i);
+            // 「图片」是按钮（点开选图），不是当前目标，所以不参与常亮
+            boolean on = (i == 0 && !bgTarget) || (i == 1 && bgTarget);
+            g.fill(r[0], r[1], r[2], r[3], on ? 0xE017484E : 0xC00C1416);
+            g.renderOutline(r[0], r[1], r[2] - r[0], r[3] - r[1], on ? 0xFF45F0F0 : 0x552FD9D9);
+            g.drawString(this.font, names[i], r[0] + (r[2] - r[0] - this.font.width(names[i])) / 2, r[1] + 7,
+                    on ? 0xFFBFFFFF : 0xFF8FA8A8, false);
+        }
+
+        boolean usable = bgTarget || !slots.isEmpty();
+        int target = targetColor();
+        int shown = target == -1 ? (bgTarget ? 0xB00A0E0F : 0x7A0D181A) : target;
         int tx = sliderTrackX();
         int tw = sliderTrackW();
-        for (int i = 0; i < 3; i++) {
-            int y = top + 9 + i * 11;
-            int val = (shown >> (16 - i * 8)) & 0xFF;
-            String letter = i == 0 ? "R" : (i == 1 ? "G" : "B");
-            g.drawString(this.font, letter, tx - 14, y, sel == null ? 0xFF5A6A6A : 0xFFC6D6D6, false);
-            g.fill(tx, y, tx + tw, y + 8, 0xFF12262A);
+        for (int i = 0; i < 4; i++) {
+            int y = top + 14 + i * 20;
+            int alpha = (shown >>> 24);
+            int val = i == 3 ? Math.max(1, alpha) : ((shown >> (16 - i * 8)) & 0xFF);
+            String letter = i == 0 ? "R" : (i == 1 ? "G" : (i == 2 ? "B" : "A"));
+            g.drawString(this.font, letter, tx - 14, y, usable ? 0xFFC6D6D6 : 0xFF5A6A6A, false);
+            g.fill(tx, y, tx + tw, y + 8, 0xC012262A);
             int knob = tx + (tw - 1) * val / 255;
-            g.fill(knob - 2, y - 2, knob + 3, y + 10, sel == null ? 0xFF2A5A5A : 0xFF45F0F0);
+            g.fill(knob - 2, y - 3, knob + 3, y + 11, usable ? 0xFF45F0F0 : 0xFF2A5A5A);
         }
         int[] pr = previewRect();
         g.fill(pr[0], pr[1], pr[2], pr[3], 0xFF000000 | shown);
         g.renderOutline(pr[0], pr[1], pr[2] - pr[0], pr[3] - pr[1], 0x662FD9D9);
-        String hex = sel == null ? "未选中格子" : (sel.getColor() < 0 ? "默认" : String.format("#%06X", shown));
-        g.drawString(this.font, hex, pr[0] + (48 - this.font.width(hex)) / 2, pr[3] + 3, 0xFF8FF7F7, false);
     }
 
     @Override
@@ -471,6 +642,7 @@ public class KeyPanelScreen extends Screen {
         if (sliderDrag >= 0) {
             sliderDrag = -1;
             saveSlots();
+            PanelStyle.save();
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
@@ -491,47 +663,13 @@ public class KeyPanelScreen extends Screen {
         }
     }
 
-
-
-    private static int cornerInset(int row, int height, int r) {
-        if (row < r) {
-            return r - row - 1;
-        }
-        if (row >= height - r) {
-            return r - (height - row - 1) - 1;
-        }
-        return 0;
-    }
-
-    private static void outlineRounded(GuiGraphics g, int x, int y, int w, int h, int r, int color) {
-        for (int i = 0; i < h; i++) {
-            int inset = cornerInset(i, h, r);
-            if (i == 0 || i == h - 1) {
-                g.fill(x + inset, y + i, x + w - inset, y + i + 1, color);
-                continue;
-            }
-            g.fill(x + inset, y + i, x + inset + 1, y + i + 1, color);
-            g.fill(x + w - inset - 1, y + i, x + w - inset, y + i + 1, color);
-        }
-    }
-
-    private static int lerpColor(int a, int b, float t) {
-        t = Math.max(0.0F, Math.min(1.0F, t));
-        int aa = (a >>> 24) & 0xFF, ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
-        int ba = (b >>> 24) & 0xFF, br = (b >> 16) & 0xFF, bg = (b >> 8) & 0xFF, bb = b & 0xFF;
-        int ca = (int) (aa + (ba - aa) * t);
-        int cr = (int) (ar + (br - ar) * t);
-        int cg = (int) (ag + (bg - ag) * t);
-        int cb = (int) (ab + (bb - ab) * t);
-        return (ca << 24) | (cr << 16) | (cg << 8) | cb;
-    }
-
+    /** 命中检测与绘制共用同一格坐标公式 {@code gridX/gridY + col/row * (cardW/gapX)}。 */
     private int cardAt(double mouseX, double mouseY) {
         for (int i = 0; i < COLS * ROWS; i++) {
             int col = i % COLS;
             int row = i / COLS;
-            int x = gridX + col * (cardW + gap);
-            int y = gridY + row * (cardH + gap) - 1;
+            int x = gridX + col * (cardW + gapX);
+            int y = gridY + row * (cardH + gapY) - 1;
             if (mouseX >= x && mouseX < x + cardW && mouseY >= y && mouseY < y + cardH + 1) {
                 return i;
             }
@@ -540,10 +678,10 @@ public class KeyPanelScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (delta > 0) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {
+        if (scrollY > 0) {
             page = Math.max(0, page - 1);
-        } else if (delta < 0) {
+        } else if (scrollY < 0) {
             page = Math.min(ConfigManager.PAGES - 1, page + 1);
         }
         return true;
@@ -569,6 +707,21 @@ public class KeyPanelScreen extends Screen {
             KeyPanelMod.LOGGER.info("[key_panel] edit mode = {}", moveMode);
             return true;
         }
+        if (moveMode && button == 0) {
+            int tb = targetButtonAt(mouseX, mouseY);
+            if (tb == 0) {
+                bgTarget = false;
+                return true;
+            }
+            if (tb == 1) {
+                bgTarget = true;
+                return true;
+            }
+            if (tb == 2) {
+                Minecraft.getInstance().setScreen(new BackgroundPickerScreen(this));
+                return true;
+            }
+        }
         if (moveMode) {
             int which = sliderAt(mouseX, mouseY);
             if (which >= 0) {
@@ -578,11 +731,9 @@ public class KeyPanelScreen extends Screen {
             }
             int[] pr = previewRect();
             if (mouseX >= pr[0] && mouseX < pr[2] && mouseY >= pr[1] && mouseY < pr[3]) {
-                if (selectedSlot >= 0 && selectedSlot < slots.size()) {
-                    slots.get(selectedSlot).setColor(-1);
-                    saveSlots();
-                    KeyPanelMod.LOGGER.info("[key_panel] slot {} colour reset", selectedSlot);
-                }
+                setTargetColor(-1);
+                saveSlots();
+                PanelStyle.save();
                 return true;
             }
         }
@@ -591,6 +742,7 @@ public class KeyPanelScreen extends Screen {
             int slotIndex = page * ConfigManager.PAGE_SIZE + index;
             if (button == 1) {
                 moveMode = false;
+                relayout();
                 moveSource = -1;
                 return true;
             }

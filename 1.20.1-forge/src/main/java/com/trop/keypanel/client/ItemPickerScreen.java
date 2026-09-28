@@ -39,7 +39,7 @@ public class ItemPickerScreen extends Screen {
     private int hovered = -1;
 
     public ItemPickerScreen(Screen parent, SlotData data) {
-        super(Component.literal("选择图标"));
+        super(Component.translatable("key_panel.item.screen"));
         this.parent = parent;
         this.data = data;
     }
@@ -59,9 +59,9 @@ public class ItemPickerScreen extends Screen {
         this.panelX = (this.width - (gridW + 24)) / 2;
         this.panelY = (this.height - (gridH + 92)) / 2;
 
-        this.search = new EditBox(this.font, panelX + 12, panelY + 24, gridW, 16, Component.literal("搜索"));
+        this.search = new EditBox(this.font, panelX + 12, panelY + 24, gridW, 16, Component.translatable("key_panel.item.search"));
         this.search.setMaxLength(48);
-        this.search.setHint(Component.literal("输入关键词搜索物品…"));
+        this.search.setHint(Component.translatable("key_panel.item.search_hint"));
         this.search.setResponder(s -> {
             this.scroll = 0;
             applyFilter(s);
@@ -70,7 +70,7 @@ public class ItemPickerScreen extends Screen {
         this.setInitialFocus(this.search);
         applyFilter("");
 
-        this.addRenderableWidget(Button.builder(Component.literal("返回"), b -> back())
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.picker.back"), b -> back())
                 .bounds(panelX + gridW / 2 - 30 + 12, panelY + gridH + 66, 60, 18).build());
     }
 
@@ -104,7 +104,7 @@ public class ItemPickerScreen extends Screen {
         this.renderBackground(g);
         g.fill(panelX, panelY, panelX + gridW + 24, panelY + gridH + 92, 0xF0060A0B);
         g.renderOutline(panelX, panelY, gridW + 24, gridH + 92, 0xFF2FD9D9);
-        g.drawString(this.font, "选择图标（点击即选中）", panelX + 12, panelY + 10, 0xFFBFFFFF, false);
+        g.drawString(this.font, Component.translatable("key_panel.item.title").getString(), panelX + 12, panelY + 10, 0xFFBFFFFF, false);
         g.fill(panelX + 12, panelY + 46, panelX + 12 + gridW, panelY + 46 + gridH, 0xFF0A0E0F);
 
         this.hovered = -1;

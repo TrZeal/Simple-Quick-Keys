@@ -32,7 +32,7 @@ public class KeyPickerScreen extends Screen {
     private boolean draggingBar;
 
     public KeyPickerScreen(Screen parent, SlotData data) {
-        super(Component.literal("选择逻辑按键"));
+        super(Component.translatable("key_panel.key.screen"));
         this.parent = parent;
         this.data = data;
     }
@@ -47,9 +47,9 @@ public class KeyPickerScreen extends Screen {
         this.panelX = (this.width - (LIST_W + 24)) / 2;
         this.panelY = (this.height - (ROWS * ROW_H + 76)) / 2;
 
-        this.search = new EditBox(this.font, panelX + 12, panelY + 26, LIST_W, 16, Component.literal("搜索"));
+        this.search = new EditBox(this.font, panelX + 12, panelY + 26, LIST_W, 16, Component.translatable("key_panel.key.search"));
         this.search.setMaxLength(48);
-        this.search.setHint(Component.literal("搜索功能（名称或按键）…"));
+        this.search.setHint(Component.translatable("key_panel.key.search_hint"));
         this.search.setResponder(s -> {
             this.scroll = 0;
             applyFilter(s);
@@ -58,7 +58,7 @@ public class KeyPickerScreen extends Screen {
         this.setInitialFocus(this.search);
         applyFilter("");
 
-        this.addRenderableWidget(Button.builder(Component.literal("返回"), b -> back())
+        this.addRenderableWidget(Button.builder(Component.translatable("key_panel.picker.back"), b -> back())
                 .bounds(panelX + 12 + LIST_W / 2 - 30, panelY + ROWS * ROW_H + 44, 60, 18).build());
     }
 
@@ -110,7 +110,7 @@ public class KeyPickerScreen extends Screen {
         int totalH = ROWS * ROW_H + 76;
         g.fill(panelX, panelY, panelX + totalW, panelY + totalH, 0xF0060A0B);
         g.renderOutline(panelX, panelY, totalW, totalH, 0xFF2FD9D9);
-        g.drawString(this.font, "点击一个功能，填入正在编辑的格子", panelX + 12, panelY + 10, 0xFFBFFFFF, false);
+        g.drawString(this.font, Component.translatable("key_panel.key.title").getString(), panelX + 12, panelY + 10, 0xFFBFFFFF, false);
 
         this.hovered = -1;
         for (int i = 0; i < ROWS; i++) {
