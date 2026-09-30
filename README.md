@@ -7,18 +7,13 @@
 
 ## Features
 
-- **One key to open**: `G` opens and closes the panel, `Esc` closes it; the key can be changed in Controls
-- **Card panel**: 9 columns × 3 rows, 27 slots per page, 3 pages (81 slots in total); turn pages with the arrows or the mouse wheel; a 16:9 panel with cut corners and a translucent body, which steps down to smaller layouts in small windows
-- **Trigger anything**: click a slot to fire it, no keybind required; hold-type actions such as sneaking or sprinting become toggles (the card lights up and shows an indicator bar)
-- **Hotkeys from other mods**: if you run malilib-based mods such as Tweakeroo, MiniHUD or Litematica, their hotkeys appear in the key picker and the panel triggers the feature itself, so a slot does not need a key of its own; with none of them installed the picker simply shows what the game has
-- **Key picker sorted by source**: a **Source** column on the left lists vanilla key bindings first and then one entry per mod (JEI, FTB, ...), with unclassifiable ones under "Other"; the source column has its own search box that matches mod names, category names and feature names
-- **Grouped by category**: inside a source, functions are listed under category headings
-- **Bound hotkeys are visible**: the card, its tooltip and the edit dialog all show the name of the hotkey's feature; if it can no longer be resolved (the mod was removed, the hotkey was renamed), the slot shows "unknown hotkey" together with the original identifier instead of going blank
-- **Commands**: each slot can hold one command (for example `home` or `gamemode creative`); a command takes priority when set, and typing gives the same completion as chat
-- **Item icons**: use any item as an icon, with a built-in keyword search picker
-- **Colours everywhere**: tint the whole panel (R / G / B plus opacity) and tint each slot's card on its own (opacity included)
-- **Your own background image**: drop a png or jpg into `config/key_panel/backgrounds/` and pick it in game; 16:9 is recommended and other ratios are centre-cropped to fill the panel; the picker has "Open folder" / "Refresh" buttons and a thumbnail grid — click a thumbnail to use it, click it again to clear
-- **Tooltips**: hover a card to see its full name and how it is triggered
+- **One key to open**: `G` opens and closes the panel, `Esc` closes it, and the key can be changed
+- **Card panel**: 9 × 3 cards over 3 pages (81 slots), turned with the wheel or the arrows; a 16:9 panel with cut corners and a translucent body
+- **Trigger anything**: click a slot to fire it, no keybind required; hold-type actions such as sneaking or sprinting become toggles
+- **Hotkeys from other mods**: if you run mods such as Tweakeroo, MiniHUD or Litematica, their hotkeys appear in the key picker and the panel triggers the feature itself; with none of them installed the picker simply shows what the game has
+- **Key picker**: sources are listed in a column on the left (vanilla first, then one entry per mod) with its own search box; functions on the right sit under category headings, and a slot bound to a hotkey shows that feature's name
+- **Commands and icons**: each slot can hold one command (run first, with chat-style completion) and use any item as its icon
+- **Make it yours**: tint the whole panel and every slot (R / G / B plus opacity), and use your own image as the background
 - **Client-side only**: works in singleplayer and on any server, nothing to install on the server
 
 ## Usage
@@ -43,6 +38,7 @@ Click the **`edit`** button at the bottom of the panel to open the edit strip be
 - **Left side** — `Slot` / `Panel` / `Image` choose what you are editing: the selected slot's card, the whole panel, or the background image picker.
 - **Right side** — four **R / G / B / A** sliders set that target's colour and opacity; the square swatch on the far right shows the result, and clicking it resets the colour.
 - In `Slot` mode you can also click two slots to swap their contents.
+- Pick `Image` to open the background picker: drop a png or jpg into `config/key_panel/backgrounds/`, then use "Open folder" / "Refresh" and the thumbnail grid — click a thumbnail to use it, click it again to clear; 16:9 is recommended and other ratios are cropped to fill.
 
 ### Using hotkeys from other mods
 
