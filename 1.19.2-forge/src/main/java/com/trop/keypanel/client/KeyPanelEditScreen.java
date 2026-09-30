@@ -31,6 +31,12 @@ public class KeyPanelEditScreen extends Screen {
     private EditBox nameBox;
     private EditBox keyBox;
     private EditBox cmdBox;
+    /**
+     * true = 「逻辑按键」框里显示的是只读的 malilib 热键说明文本，不是 keyBinding。
+     * 这种情况下 responder / {@link #save()} / {@link #backToPanel()} 都绝不能把它当成
+     * keyBinding 写回（热键与原版键位互斥）。
+     */
+    private boolean keyBoxShowsHotkey;
     private final java.util.List<String> suggestions = new java.util.ArrayList<>();
     private int suggestionHover = -1;
     private int suggestionIndex = -1;
@@ -66,9 +72,15 @@ public class KeyPanelEditScreen extends Screen {
 
         this.keyBox = new EditBox(this.font, x0 + 74, y0 + 68, 118, 16, Component.translatable("key_panel.edit.key_id"));
         this.keyBox.setMaxLength(64);
-        this.keyBox.setValue(data.getKeyBinding() == null ? "" : data.getKeyBinding());
-        this.keyBox.setResponder(text -> data.setKeyBinding(text.trim()));
+        // 展示热键时 keyBoxShowsHotkey 为 true，responder 直接丢弃，
+        // 避免把只读的展示文本当成 keyBinding 写进槽位（脏 keyBinding 会把热键分支挡住）
+        this.keyBox.setResponder(text -> {
+            if (!this.keyBoxShowsHotkey) {
+                data.setKeyBinding(text.trim());
+            }
+        });
         this.addRenderableWidget(this.keyBox);
+        syncKeyBox();
 
         this.cmdBox = new EditBox(this.font, x0 + 74, y0 + 90, 178, 16, Component.translatable("key_panel.edit.command"));
         this.cmdBox.setMaxLength(128);
@@ -134,8 +146,11 @@ public class KeyPanelEditScreen extends Screen {
         data.setCustomName("");
         data.setKeyBinding("");
         data.setCommand("");
+        data.setHotkey("");   // 方案②：malilib 热键也一并清掉，否则它会挡住上面清空的键位
         this.itemBox.setValue("");
         this.nameBox.setValue("");
+        this.keyBoxShowsHotkey = false;   // 先复位展示状态，再清输入框（否则 responder 会被挡住）
+        this.keyBox.setEditable(true);
         this.keyBox.setValue("");
         this.cmdBox.setValue("");
         if (this.parent != null) {
@@ -146,7 +161,8 @@ public class KeyPanelEditScreen extends Screen {
     private void save() {
         data.setItemId(this.itemBox.getValue().trim());
         data.setCustomName(this.nameBox.getValue().trim());
-        data.setKeyBinding(this.keyBox.getValue().trim());
+        // 框里是只读的热键说明文本时不能回写 keyBinding；热键与 keyBinding 互斥，这里统一按空处理
+        data.setKeyBinding(this.keyBoxShowsHotkey ? "" : this.keyBox.getValue().trim());
         data.setCommand(this.cmdBox.getValue().trim());
         if (this.parent != null) {
             this.parent.saveSlots();
@@ -157,6 +173,11 @@ public class KeyPanelEditScreen extends Screen {
     }
 
     private void backToPanel() {
+        // 「返回」与「保存」落盘的值必须一致（老路径本来就把 trim 过的值实时写进 data，
+        // 这里额外挡住「显示热键时把展示文本写回 keyBinding」这一条）
+        if (this.keyBoxShowsHotkey) {
+            data.setKeyBinding("");
+        }
         if (this.parent != null) {
             this.parent.saveSlots();
             this.minecraft.setScreen(this.parent);
@@ -165,13 +186,48 @@ public class KeyPanelEditScreen extends Screen {
         }
     }
 
+    /**
+     * 「逻辑按键」框该显示什么：绑了 malilib 热键时显示只读的热键说明（否则用户会以为这格是空的），
+     * 没绑热键时照旧显示 keyBinding。
+     */
+    private String keyBoxExpectedValue() {
+        String hotkey = data.getHotkey();
+        if (hotkey == null || hotkey.isEmpty()) {
+            return data.getKeyBinding() == null ? "" : data.getKeyBinding();
+        }
+        String summary = MalilibHotkeys.plainSummaryOf(hotkey);
+        if (summary.isEmpty()) {
+            // 热键解析不到（模组缺失/已改名）也要让用户看见这格绑过什么
+            summary = Component.translatable("key_panel.edit.hotkey.unknown", hotkey).getString();
+        }
+        // 只读展示串按字符数截断：EditBox 的 maxLength(64) 是给 keyBinding 用的，
+        // 展示值必须短于它，否则每帧都会因为「框里的值 ≠ 期望值」重复 setValue
+        return Component.translatable("key_panel.edit.key.hotkey", clip(summary, 44)).getString();
+    }
+
+    /** 超过 max 个字符就截断补省略号（只读展示用，避免撑破输入框）。 */
+    private static String clip(String text, int max) {
+        return text == null || text.length() <= max ? text : text.substring(0, max - 1) + "…";
+    }
+
+    /** 把「逻辑按键」框同步成当前状态：绑热键时只读展示，否则可编辑地显示 keyBinding。 */
+    private void syncKeyBox() {
+        boolean bound = data.getHotkey() != null && !data.getHotkey().isEmpty();
+        this.keyBoxShowsHotkey = bound;
+        String want = keyBoxExpectedValue();
+        this.keyBox.setEditable(!bound);
+        if (!this.keyBox.getValue().equals(want)) {
+            this.keyBox.setValue(want);
+        }
+    }
+
     @Override
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
         if (!this.itemBox.isFocused() && !this.itemBox.getValue().equals(data.getItemId())) {
             this.itemBox.setValue(data.getItemId() == null ? "" : data.getItemId());
         }
-        if (!this.keyBox.isFocused() && !this.keyBox.getValue().equals(data.getKeyBinding())) {
-            this.keyBox.setValue(data.getKeyBinding() == null ? "" : data.getKeyBinding());
+        if (!this.keyBox.isFocused() && !this.keyBox.getValue().equals(keyBoxExpectedValue())) {
+            syncKeyBox();
         }
         if (!this.nameBox.isFocused() && !this.nameBox.getValue().equals(data.getCustomName())) {
             this.nameBox.setValue(data.getCustomName() == null ? "" : data.getCustomName());
@@ -192,8 +248,11 @@ public class KeyPanelEditScreen extends Screen {
                 x0 + 4, y0 + 72, 0xFFC6D6D6);
         GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.command").getString(),
                 x0 + 4, y0 + 94, 0xFFC6D6D6);
-        GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.edit.example").getString(),
-                x0 + 2, y0 + 112, 0xFF6FA8A8);
+        // 同一行灰字：绑了热键时改说明是只读的 malilib 热键，版面/坐标/颜色完全不变
+        String hint = this.keyBoxShowsHotkey
+                ? Component.translatable("key_panel.edit.hotkey.hint").getString()
+                : Component.translatable("key_panel.edit.example").getString();
+        GuiCompat.drawString(poseStack, this.font, hint, x0 + 2, y0 + 112, 0xFF6FA8A8);
         super.render(poseStack, mouseX, mouseY, partialTick);
         flush();
         this.suggestionHover = -1;

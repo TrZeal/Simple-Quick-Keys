@@ -107,6 +107,9 @@
   "key_panel.edit.name": "Name",
   "key_panel.edit.key": "Key binding",
   "key_panel.edit.key_id": "Key binding ID",
+  "key_panel.edit.key.hotkey": "Hotkey: %s",
+  "key_panel.edit.hotkey.hint": "malilib hotkey (read-only; use \"Pick key\")",
+  "key_panel.edit.hotkey.unknown": "unknown hotkey %s",
   "key_panel.edit.command": "Command",
   "key_panel.edit.example": "e.g. minecraft:chest / key.inventory / home (command wins)",
   "key_panel.edit.pick_item": "Pick icon",
@@ -121,5 +124,15 @@
   "key_panel.key.screen": "Pick a key binding",
   "key_panel.key.title": "Click a function to fill the slot being edited",
   "key_panel.key.search": "Search",
-  "key_panel.key.search_hint": "Search functions (name or key)..."
+  "key_panel.key.search_hint": "Search functions (name or key)...",
+  "key_panel.key.group.vanilla": "Vanilla key bindings",
+  "key_panel.key.group.other": "Other",
+  "key_panel.key.source": "Source",
+  "key_panel.key.source.search": "Source search",
+  "key_panel.key.source.search_hint": "Search sources...",
+  "key_panel.key.source.no_match": "(no matching sources)",
+  "key_panel.key.source.empty": "(no key bindings to show for this source)",
+  "key_panel.key.hint.hold": "Hotkeys fire their own callback directly; hold-type keys still only get one tap and never stay held",
+  "key_panel.key.hint.mouse": "Falls back to simulated key events only if the direct call is unavailable (mouse buttons/combos may fail then)",
+  "key_panel.panel.tip.hotkey": "Hotkey: %s"
 }

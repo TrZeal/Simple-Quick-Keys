@@ -57,6 +57,17 @@ public final class KeyPanelClientEvents {
         }
     }
 
+    /**
+     * 方案②：malilib 热键只给得到 GLFW 键码（int），这里包一层键盘 Key 走同一条原版通路。
+     * 负数（malilib 的鼠标键码）直接忽略，调用方已先行拦截。
+     */
+    public static void fireKeyEvent(int keyCode, int scanCode, int action) {
+        if (keyCode < 0) {
+            return;
+        }
+        fireKeyEvent(com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM.getOrCreate(keyCode), scanCode, action);
+    }
+
     @SubscribeEvent
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) {

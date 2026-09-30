@@ -322,6 +322,12 @@ public class KeyPanelScreen extends Screen {
             }
 
             if (empty) {
+                // 1.1.4：只绑了 malilib 热键、没有物品图标的格子也必须看得出绑了什么，
+                // 否则整格看起来是空的（用户会以为「绑定没进槽位」）。空格子的外观一字未动。
+                if (data.getHotkey().isEmpty()) {
+                    continue;
+                }
+                drawCardLabel(g, x, drawY, displayName(data), hover || active);
                 continue;
             }
             ItemStack stack = stackOf(data);
@@ -334,19 +340,7 @@ public class KeyPanelScreen extends Screen {
                 g.renderItem(stack, 0, 0);
                 g.pose().popPose();
             }
-            String label = displayName(data);
-            if (!label.isEmpty()) {
-                int maxW = cardW - 6;
-                String shown = label;
-                while (this.font.width(shown) > maxW && shown.length() > 1) {
-                    shown = shown.substring(0, shown.length() - 1);
-                }
-                if (!shown.equals(label) && shown.length() > 1) {
-                    shown = shown.substring(0, shown.length() - 1) + "…";
-                }
-                g.drawString(this.font, shown, x + (cardW - this.font.width(shown)) / 2, drawY + cardH - 12,
-                        (hover || active) ? COL_NAME_HOVER : COL_NAME, false);
-            }
+            drawCardLabel(g, x, drawY, displayName(data), hover || active);
             if (moveMode && slotIndex == moveSource) {
                 g.renderOutline(x, drawY, cardW, cardH, 0xFF45F0F0);
                 g.fill(x + 1, drawY + 1, x + cardW - 1, drawY + cardH - 1, 0x4445F0F0);
@@ -403,9 +397,42 @@ public class KeyPanelScreen extends Screen {
         return true;
     }
 
+    /**
+     * 卡片底部的名字：按可用宽度截断补省略号。物品图标路径与「只绑热键」路径共用同一段绘制，
+     * 避免两处截断逻辑不一致。
+     */
+    private void drawCardLabel(GuiGraphics g, int x, int drawY, String label, boolean highlight) {
+        if (label == null || label.isEmpty()) {
+            return;
+        }
+        int maxW = cardW - 6;
+        String shown = label;
+        while (this.font.width(shown) > maxW && shown.length() > 1) {
+            shown = shown.substring(0, shown.length() - 1);
+        }
+        if (!shown.equals(label) && shown.length() > 1) {
+            shown = shown.substring(0, shown.length() - 1) + "…";
+        }
+        g.drawString(this.font, shown, x + (cardW - this.font.width(shown)) / 2, drawY + cardH - 12,
+                highlight ? COL_NAME_HOVER : COL_NAME, false);
+    }
+
     private static String displayName(SlotData data) {
         if (data.getCustomName() != null && !data.getCustomName().isEmpty()) {
             return data.getCustomName();
+        }
+        // 方案②：设了 malilib 热键就显示热键名（纯缓存查表，不反射）
+        String hotkeyId = data.getHotkey();
+        if (hotkeyId != null && !hotkeyId.isEmpty()) {
+            String hotkeyName = MalilibHotkeys.displayNameOf(hotkeyId);
+            if (!hotkeyName.isEmpty()) {
+                return hotkeyName;
+            }
+            // 1.2.0：热键 id 解析不到（malilib 被移除 / 热键改名）时<b>不能返回空串</b>——
+            // 卡片那边的 drawCardLabel 见到空串直接 return，1.1.4 加的「没有图标也画名字」
+            // 就会什么都不画，格子看着像没绑东西。这里退回带 id 的「未知热键」文案：
+            // 非空、可本地化，还能看出原来绑的是哪一条（悬停提示同样拿到这个名字）。
+            return Component.translatable("key_panel.edit.hotkey.unknown", hotkeyId).getString();
         }
         if (data.getKeyBinding() != null && !data.getKeyBinding().isEmpty()) {
             String name = Component.translatable(data.getKeyBinding()).getString();
@@ -425,7 +452,8 @@ public class KeyPanelScreen extends Screen {
             return;
         }
         SlotData data = slots.get(page * ConfigManager.PAGE_SIZE + hovered);
-        if (data.isEmpty()) {
+        if (data.isEmpty() && data.getHotkey().isEmpty()) {
+            // 1.1.4：只绑了 malilib 热键、没有物品图标的格子也要有悬停提示（与卡片上显示的名字一致）
             return;
         }
         String name = displayName(data);
@@ -435,6 +463,12 @@ public class KeyPanelScreen extends Screen {
         String how;
         if (!data.getCommand().isEmpty()) {
             how = Component.translatable("key_panel.panel.tip.command", data.getCommand()).getString();
+        } else if (!data.getHotkey().isEmpty()) {
+            String summary = MalilibHotkeys.summaryOf(data.getHotkey());
+            if (summary.isEmpty()) {
+                summary = data.getHotkey();
+            }
+            how = Component.translatable("key_panel.panel.tip.hotkey", summary).getString();
         } else if (data.getKeyBinding() == null || data.getKeyBinding().isEmpty()) {
             how = Component.translatable("key_panel.panel.tip.unbound").getString();
         } else {
@@ -847,6 +881,11 @@ public class KeyPanelScreen extends Screen {
             this.onClose();
             return;
         }
+        if (data.getHotkey() != null && !data.getHotkey().isEmpty()) {
+            // 方案②：malilib 热键直连（新增分支，命令/原版键位老路径一字未动）
+            triggerMalilibHotkey(data);
+            return;
+        }
         if (data.isEmpty() || data.getKeyBinding() == null || data.getKeyBinding().isEmpty()) {
             KeyPanelMod.LOGGER.info("[key_panel] slot {} is empty (no command / no key binding)", data.getIndex());
             return;
@@ -889,6 +928,86 @@ public class KeyPanelScreen extends Screen {
 
     public void saveSlots() {
         ConfigManager.save(this.slots);
+    }
+
+    /**
+     * 方案② 触发分支：<b>优先直连该热键自己的回调</b>，直连不可用时才回退到「发原始按键事件」。
+     *
+     * <p>顺序：解析热键（只读）→ {@code onClose()} → {@link MalilibHotkeys#invoke}。
+     * 关闭界面必须在触发前：malilib 的 {@code KeybindSettings.Context.INGAME} 要求当前无界面，
+     * 状态机通路也会读这个上下文。</p>
+     *
+     * <p>键码约定（malilib util/KeyCodes）：&gt;= 0 是 GLFW 键盘键码，&lt; 0 是鼠标键码（按钮号 - 100）。
+     * 直连通路不需要键码，所以含鼠标键码的热键也能触发；只有回退路径（发原始事件）才会因为
+     * 1.21.1 的 {@code MouseHandler#onPress(long,int,int,int)} 是 private（已 javap 核实）而放弃。</p>
+     */
+    private void triggerMalilibHotkey(SlotData data) {
+        String id = data.getHotkey();
+        MalilibHotkeys.Entry entry = MalilibHotkeys.byId(id);
+        if (entry == null) {
+            KeyPanelMod.LOGGER.warn("[key_panel] 槽位 {} 的 malilib 热键 '{}' 未找到（模组缺失或热键已改名）",
+                    data.getIndex(), id);
+            return;
+        }
+        if (!MalilibHotkeys.directAvailable()) {
+            // 两条直连通路都反射不到（例如 malilib 换了内部结构）：原样走 1.1.2 的老路径
+            KeyPanelMod.LOGGER.warn("[key_panel] malilib 直连入口不可用（反射失败），热键 {} 降级为模拟按键触发", id);
+            triggerMalilibHotkeyRaw(data, entry);
+            return;
+        }
+        KeyPanelMod.LOGGER.info("[key_panel] trigger slot {} -> malilib hotkey {} ({})",
+                data.getIndex(), id, entry.keysDisplay);
+        closeIfOpen();
+        MalilibHotkeys.Trigger result = MalilibHotkeys.invoke(entry);
+        switch (result) {
+            case STATE:
+                KeyPanelMod.LOGGER.info("[key_panel] malilib 热键 {} 直连成功（走 malilib 自身状态机 updateIsPressed）", id);
+                return;
+            case CALLBACK:
+                KeyPanelMod.LOGGER.info("[key_panel] malilib 热键 {} 直连成功（直接调用该热键回调 onKeyAction）", id);
+                return;
+            case NO_CALLBACK:
+                KeyPanelMod.LOGGER.info("[key_panel] malilib 热键 {} 没有可直连的回调（按住型/仅在 tick 轮询的功能），本次不触发", id);
+                return;
+            default:
+                KeyPanelMod.LOGGER.warn("[key_panel] malilib 热键 {} 直连失败，降级为模拟按键触发", id);
+                triggerMalilibHotkeyRaw(data, entry);
+        }
+    }
+
+    /** 界面还开着才关（回退分支可能在 {@link #closeIfOpen()} 之后才走到）。 */
+    private void closeIfOpen() {
+        if (Minecraft.getInstance().screen == this) {
+            this.onClose();
+        }
+    }
+
+    /**
+     * 1.1.2 的老路径：只发原始按键事件，不做任何「临时改绑虚拟键」（那套对 malilib 无效）。
+     *
+     * <p>顺序：读当前键码 → 全部 PRESS，再逆序 RELEASE。这条路径会经原版键盘入口分发给
+     * <b>所有</b>绑了该键码的功能，且含鼠标键码的热键发不出去，所以只在直连不可用时兜底。</p>
+     */
+    private void triggerMalilibHotkeyRaw(SlotData data, MalilibHotkeys.Entry entry) {
+        String id = entry.id;
+        List<Integer> keys = entry.keys();
+        if (keys.isEmpty()) {
+            KeyPanelMod.LOGGER.info("[key_panel] malilib 热键 '{}' 当前没有绑定键码，跳过", id);
+            return;
+        }
+        for (int code : keys) {
+            if (code < 0) {
+                KeyPanelMod.LOGGER.warn("[key_panel] malilib 热键 '{}' 含鼠标键码 {}，原版无公开入口，跳过发送",
+                        id, MalilibHotkeys.keyName(code));
+                return;
+            }
+        }
+        KeyPanelMod.LOGGER.info("[key_panel] trigger slot {} -> malilib hotkey {} ({}) [模拟按键]",
+                data.getIndex(), id, entry.keysDisplay);
+        // 沿用现有顺序：先关界面（malilib 的 INGAME 上下文要求屏幕为 null），再发事件
+        closeIfOpen();
+        int sent = MalilibHotkeys.sendSequence(keys, (code, action) -> KeyPanelClientEvents.fireKeyEvent(code, 0, action));
+        KeyPanelMod.LOGGER.info("[key_panel] malilib 热键 {} 已发送 {} 个键码（PRESS 全部 + 逆序 RELEASE）", id, sent);
     }
 
     private static boolean isActiveToggle(SlotData data) {

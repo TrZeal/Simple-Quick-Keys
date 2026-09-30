@@ -107,6 +107,9 @@
   "key_panel.edit.name": "名称",
   "key_panel.edit.key": "逻辑按键",
   "key_panel.edit.key_id": "逻辑按键ID",
+  "key_panel.edit.key.hotkey": "热键：%s",
+  "key_panel.edit.hotkey.hint": "已绑定 malilib 热键（只读，改绑请点右侧「选择按键」）",
+  "key_panel.edit.hotkey.unknown": "未知热键 %s",
   "key_panel.edit.command": "快捷命令",
   "key_panel.edit.example": "例：minecraft:chest / key.inventory / home（命令优先）",
   "key_panel.edit.pick_item": "选择图标",
@@ -121,5 +124,15 @@
   "key_panel.key.screen": "选择逻辑按键",
   "key_panel.key.title": "点击一个功能，填入正在编辑的格子",
   "key_panel.key.search": "搜索",
-  "key_panel.key.search_hint": "搜索功能（名称或按键）…"
+  "key_panel.key.search_hint": "搜索功能（名称或按键）…",
+  "key_panel.key.group.vanilla": "原版键位",
+  "key_panel.key.group.other": "其它",
+  "key_panel.key.source": "来源",
+  "key_panel.key.source.search": "来源搜索",
+  "key_panel.key.source.search_hint": "搜索来源…",
+  "key_panel.key.source.no_match": "（没有匹配的来源）",
+  "key_panel.key.source.empty": "（该来源没有可显示的键位）",
+  "key_panel.key.hint.hold": "热键直连其自身回调触发；按住型仍只能瞬按，不会持续按住",
+  "key_panel.key.hint.mouse": "仅当直连不可用时才回退模拟按键（那时鼠标键/组合键可能无效）",
+  "key_panel.panel.tip.hotkey": "热键：%s"
 }

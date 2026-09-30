@@ -19,6 +19,14 @@ public class SlotData {
     @SerializedName("command")
     private String command = "";
 
+    /**
+     * 方案②：malilib 系模组（Tweakeroo / MiniHUD / Litematica 等）热键 ID，格式 {@code 模组名|配置名}。
+     * 空串 = 未设置。与 {@link #keyBinding} <b>互斥</b>（选热键就清 keyBinding，反之亦然）；
+     * 旧配置缺该字段时 Gson 留 null，getter 统一按空串处理，行为与升级前完全一致。
+     */
+    @SerializedName("hotkey")
+    private String hotkey = "";
+
     /** 该格卡片的背景颜色（0xRRGGBB）；-1 表示使用默认（不着色）。 */
     @SerializedName("color")
     private int color = -1;
@@ -45,6 +53,15 @@ public class SlotData {
 
     public void setCommand(String command) {
         this.command = command == null ? "" : command;
+    }
+
+    /** malilib 热键 ID（{@code 模组名|配置名}）；空串表示该格没设 malilib 热键。 */
+    public String getHotkey() {
+        return hotkey == null ? "" : hotkey;
+    }
+
+    public void setHotkey(String hotkey) {
+        this.hotkey = hotkey == null ? "" : hotkey;
     }
 
     public int getColor() {
