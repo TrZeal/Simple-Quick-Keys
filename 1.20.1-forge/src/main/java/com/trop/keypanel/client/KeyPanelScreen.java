@@ -29,7 +29,7 @@ import java.util.List;
  *   <li>{@code Screen#renderBackground} 只有 1 参 {@code renderBackground(GuiGraphics)}（4 参是 1.20.2+）</li>
  *   <li>{@code mouseScrolled} 是 3 参 {@code (double,double,double)}（4 参是 1.20.2+）</li>
  *   <li>{@code GuiGraphics#blit} 与 {@code renderOutline}、{@code pose()}、{@code flush()} 与 1.21.1 同名同参</li>
- *   <li>{@code ResourceLocation} 用 1.20.1 工程既有的 {@code new ResourceLocation(...)} 写法</li>
+ *   <li>{@code ResourceLocation} 统一用 {@code ResourceLocation.fromNamespaceAndPath(...)}（1.20.1 已提供，旧的 2 参构造器已标记 removal）</li>
  * </ul>
  * 原有 1.20.1 的按键触发逻辑（虚拟键 163~243、临时改绑、{@code removed()} 兜底、
  * SRG 兼容反射）原样保留。
@@ -37,7 +37,7 @@ import java.util.List;
 public class KeyPanelScreen extends Screen {
 
     private static final ResourceLocation TEX2 =
-            new ResourceLocation("key_panel", "textures/gui/key_panel_v2.png");
+            ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel_v2.png");
     private static final int TEX2_W = 512;
     private static final int TEX2_H = 512;
     private static final int[] CARD_X = {0, 50, 92};
@@ -289,20 +289,6 @@ public class KeyPanelScreen extends Screen {
         KeyPanelMod.LOGGER.info("[key_panel] swap slot {} <-> {}", a, b);
     }
 
-    private String moveHint() {
-        if (bgTarget) {
-            int c = PanelStyle.color();
-            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default_look").getString() : String.format("#%08X", c);
-            return Component.translatable("key_panel.panel.hint.bg", hex).getString();
-        }
-        if (selectedSlot >= 0 && selectedSlot < slots.size()) {
-            int c = slots.get(selectedSlot).getColor();
-            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default").getString() : String.format("#%08X", c);
-            return Component.translatable("key_panel.panel.hint.slot", String.valueOf(selectedSlot + 1), hex).getString();
-        }
-        return moveSource < 0 ? Component.translatable("key_panel.panel.hint.edit").getString() : Component.translatable("key_panel.panel.hint.move").getString();
-    }
-
     private void drawPanel(GuiGraphics g) {
         drawPanelBackground(g);
     }
@@ -379,22 +365,36 @@ public class KeyPanelScreen extends Screen {
 
     private static KeyMapping virtualHolder;
     private static com.mojang.blaze3d.platform.InputConstants.Key virtualHolderOriginal;
+    private static KeyModifier virtualHolderModifier = KeyModifier.NONE;
 
+    /**
+     * 还原被临时改绑的功能：<b>修饰键必须一起还原</b>。
+     * 只还原 {@code Key} 会把玩家设的 Shift/Ctrl/Alt 组合键永久改成裸键，并写进 options.txt。
+     * 面板关闭、槽位切换、UNKNOWN 早退三条路径都走这里。
+     */
     static void restoreVirtualHolder() {
         if (virtualHolder != null && virtualHolderOriginal != null) {
-            virtualHolder.setKeyModifierAndCode(KeyModifier.NONE, virtualHolderOriginal);
+            virtualHolder.setKeyModifierAndCode(virtualHolderModifier, virtualHolderOriginal);
             virtualHolder.setDown(false);
             KeyMapping.resetMapping();
         }
         virtualHolder = null;
         virtualHolderOriginal = null;
+        virtualHolderModifier = KeyModifier.NONE;
     }
 
-    /** 面板关闭时确保虚拟键的临时改绑已还原。 */
+    /** 面板关闭时确保虚拟键的临时改绑已还原，并补一次未落盘的拖动结果。 */
     @Override
     public void removed() {
         super.removed();
         restoreVirtualHolder();
+        // 拖动中直接按 Esc 关面板时 mouseReleased 不会来，这里补写一次；
+        // 只在拖动过（sliderDrag >= 0）时才写，避免每次关面板都写盘。
+        if (sliderDrag >= 0) {
+            sliderDrag = -1;
+            saveSlots();
+            PanelStyle.save();
+        }
     }
 
     private static boolean rebindToVirtual(KeyMapping mapping, KeyMapping virtual) {
@@ -406,6 +406,7 @@ public class KeyPanelScreen extends Screen {
         }
         restoreVirtualHolder();
         virtualHolderOriginal = mapping.getKey();
+        virtualHolderModifier = KeyCompat.getKeyModifier(mapping);   // 与 Key 成对保存
         virtualHolder = mapping;
         KeyCompat.setKeyModifierAndCode(mapping, KeyModifier.NONE, virtual.getKey());
         mapping.setDown(false);
@@ -551,7 +552,11 @@ public class KeyPanelScreen extends Screen {
         return new int[]{x, stripTop() + 16, x + 64, stripTop() + 80};
     }
 
-    /** 命中检测与绘制共用同一行公式 {@code top + 14 + i * 20}，两边不会错位。 */
+    /**
+     * 命中检测与绘制共用同一行公式 {@code top + 14 + i * 20}，两边不会错位。
+     * 命中区间收成每行 20px（{@code [y-7, y+13)}）：原来用 {@code [y-7, y+15)} 会和下一行
+     * 重叠 2px，落在重叠带里拖动会跳到相邻那一行。
+     */
     private int sliderAt(double mx, double my) {
         if (!moveMode) {
             return -1;
@@ -564,7 +569,7 @@ public class KeyPanelScreen extends Screen {
         }
         for (int i = 0; i < 4; i++) {
             int y = top + 14 + i * 20;
-            if (my >= y - 7 && my < y + 15) {
+            if (my >= y - 7 && my < y + 13) {
                 return i;
             }
         }
@@ -875,18 +880,23 @@ public class KeyPanelScreen extends Screen {
         }
         // 触发方式：先把本格对应的虚拟键临时绑定到目标功能上，再把这个键交给原版按键入口处理，
         // 由原版完成点击计数、按下状态与按键匹配（详见 KeyPanelClientEvents#fireKeyEvent）。
+        // 改绑失败时不要拿映射当前的键当兜底：那个键此刻可能正被上一次改绑占着，
+        // 直接走 fireKeyEvent 会把虚拟键当成真实输入再打一遍。
         KeyMapping virtual = KeyBindings.virtual(data.getIndex());
-        boolean rebound = rebindToVirtual(mapping, virtual);
-        com.mojang.blaze3d.platform.InputConstants.Key key =
-                rebound && virtual != null ? virtual.getKey() : mapping.getKey();
+        if (!rebindToVirtual(mapping, virtual)) {
+            KeyPanelMod.LOGGER.info("[key_panel] 槽位 {} 无法改绑到虚拟键，跳过模拟", data.getIndex());
+            return;
+        }
+        com.mojang.blaze3d.platform.InputConstants.Key key = virtual.getKey();
         if (key == com.mojang.blaze3d.platform.InputConstants.UNKNOWN) {
             KeyPanelMod.LOGGER.info("[key_panel] 槽位 {} 的目标功能没有可用键码，跳过模拟", data.getIndex());
+            restoreVirtualHolder();   // 早退也必须还原，否则目标键位会永久卡在虚拟键上
             return;
         }
         int before = KeyCompat.readClickCount(mapping);
         KeyPanelClientEvents.fireKeyEvent(key, 0, org.lwjgl.glfw.GLFW.GLFW_PRESS);
         KeyPanelClientEvents.fireKeyEvent(key, 0, org.lwjgl.glfw.GLFW.GLFW_RELEASE);
-        // 原版入口处理完毕后立即还原，使该功能在「按键设置」中的键位始终保持不变。
+        // 原版入口处理完毕后立即还原，使该功能在「按键设置」中的键位与修饰键始终保持不变。
         restoreVirtualHolder();
         KeyPanelClientEvents.pressTemporarily(mapping);   // 还原后继续维持按下状态，供长按类功能使用
         KeyPanelMod.LOGGER.info("[key_panel] 模拟按键 {} → {}（clickCount {} -> {}）",

@@ -1,21 +1,5 @@
 // key_panel —— NeoForge 1.21.1 (21.1.251)
-//
-// 两条构建路线（详见 BUILD-README.md）：
-//
-//   1) 默认 build.gradle（本文件）—— 对本地 libs/ 里的 jar 做 compileOnly 编译。
-//      · 可行原因：NeoForge 1.20.5 起运行期改用 Mojang 官方名，产物无需 reobf ✓
-//      · 命令：./gradlew build
-//
-//   2) build-moddev.gradle —— 官方 ModDevGradle 工具链，需要 maven.neoforged.net 可达。
-//      · 命令：./gradlew -b build-moddev.gradle build
-//
-// libs/ 里的内容：
-//   libs/minecraft-1.21.1-official.jar  官方 client.jar + 官方 ProGuard 映射重映射后的 MC（官方名）
-//   libs/neoforge-21.1.251-universal.jar NeoForge 本体
-//   libs/fancymodloader-loader-*.jar    FML（@Mod / FMLPaths / EventBusSubscriber）
-//   libs/bus-*.jar                      net.neoforged.bus 事件总线
-//   libs/mergetool-2.0.0-api.jar        含 net.neoforged.api.distmarker.Dist
-//   libs/mc/                            MC 的传递依赖（gson / guava / lwjgl / brigadier / joml …）
+// 纯客户端模组，1.21.1 版默认基于 libs/ 下的依赖 jar 编译；备选 ModDevGradle 构建见 build-moddev.gradle。
 
 plugins {
     id 'java'

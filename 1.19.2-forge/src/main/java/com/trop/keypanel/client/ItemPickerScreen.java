@@ -51,6 +51,14 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        // init() 会被重复调用（窗口缩放 / GUI 缩放），这三个列表必须先清空，
+        // 否则物品列表会随每次缩放翻一倍。
+        this.all.clear();
+        this.names.clear();
+        this.filtered.clear();
+        this.scroll = 0;
+        this.hovered = -1;
+        this.draggingBar = false;
         for (Item item : Registry.ITEM) {
             if (item == Items.AIR) {
                 continue;
@@ -105,7 +113,8 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(poseStack);
+        // renderBackground 覆写成空实现（见文件末尾）：原版暗化层会盖在自己的面板之上，
+        // 让面板比按钮暗一档，所以这里不再手写调用它。
         fill(poseStack, panelX, panelY, panelX + gridW + 24, panelY + gridH + 92, 0xF0060A0B);
         outline(poseStack, panelX, panelY, gridW + 24, gridH + 92, 0xFF2FD9D9);
         GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.item.title").getString(),
@@ -162,9 +171,18 @@ public class ItemPickerScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(PoseStack poseStack) {
+        // 本模组界面自己画背景：不叠加原版的暗化层，否则它会盖在面板之上，
+        // 把切角四角压成方的（渲染顺序问题）。
+    }
+
+    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        int rows = (filtered.size() + COLS - 1) / COLS;
         int barX = panelX + 12 + gridW + 3;
-        if (button == 0 && mouseX >= barX && mouseX < barX + 6 && mouseY >= gridY0() && mouseY < gridY0() + gridH) {
+        // 与 render 里画滚动条的条件一致：条没画出来就不该能点到
+        if (button == 0 && rows > ROWS
+                && mouseX >= barX && mouseX < barX + 6 && mouseY >= gridY0() && mouseY < gridY0() + gridH) {
             this.draggingBar = true;
             dragTo(mouseY);
             return true;
@@ -199,6 +217,11 @@ public class ItemPickerScreen extends Screen {
 
     private void dragTo(double mouseY) {
         int rows = (filtered.size() + COLS - 1) / COLS;
+        // 搜索无结果时 rows == 0（甚至 filtered 为空），这里必须早退：
+        // 后面 barH 的 gridH * ROWS / rows 会直接 ArithmeticException: / by zero。
+        if (rows <= 0) {
+            return;
+        }
         int barH = Math.max(14, gridH * ROWS / rows);
         double t = (mouseY - gridY0() - barH / 2.0D) / Math.max(1.0D, gridH - barH);
         this.scroll = Math.max(0, Math.min(maxScroll(), (int) Math.round(t * maxScroll())));

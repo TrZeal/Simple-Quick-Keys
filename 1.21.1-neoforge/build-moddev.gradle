@@ -1,9 +1,6 @@
-// 官方 ModDevGradle 工具链版构建脚本（需要 maven.neoforged.net 可达）
+// 备选构建方式：官方 ModDevGradle 工具链（需要能访问 NeoForged 官方 Maven）
 //
 // 用法：./gradlew -b build-moddev.gradle build
-//
-// 为什么默认不用这个：ModDevGradle 会驱动 NeoForm Runtime (NFRT)，
-// 详见 BUILD-README.md。
 
 plugins {
     id 'java'

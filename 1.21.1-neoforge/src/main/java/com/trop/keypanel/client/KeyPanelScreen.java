@@ -19,29 +19,20 @@ import java.util.List;
 
 public class KeyPanelScreen extends Screen {
 
-    private static final ResourceLocation TEXTURE =
-            ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel.png");
     private static final ResourceLocation TEX2 =
             ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel_v2.png");
     private static final int TEX2_W = 512;
     private static final int TEX2_H = 512;
     private static final int[] CARD_X = {0, 50, 92};
     private int tierIndex;
-    private static final int TEX_W = 1024;
-    private static final int TEX_H = 1024;
-    private int cardUNormal;
-    private int cardUEmpty;
-    private int cardUHover;
-    private int cardVNormal;
-    private int cardVEmpty;
-    private int cardVHover;
 
     private static final int COLS = 9;
     private static final int ROWS = 3;
+    // 每档：卡片宽、高、间距、内边距、图标缩放（UV 由 drawCards 里的 CARD_X / cardV 决定）
     private static final int[][] TIERS = {
-            {46, 54, 4, 14, 2, 0, 0, 490, 0, 490, 62, 490, 124},
-            {40, 48, 3, 10, 2, 0, 230, 490, 190, 490, 244, 490, 298},
-            {34, 40, 2, 8, 1, 0, 430, 490, 360, 490, 406, 490, 452},
+            {46, 54, 4, 14, 2},
+            {40, 48, 3, 10, 2},
+            {34, 40, 2, 8, 1},
     };
     private static final int PAGEBAR = 22;
 
@@ -52,8 +43,6 @@ public class KeyPanelScreen extends Screen {
     private int gapY = TIERS[0][2];
     private int pad = TIERS[0][3];
     private int iconScale = TIERS[0][4];
-    private int panelU;
-    private int panelV;
     private int panelW;
     private int panelH;
     private static final int CORNER = 12;
@@ -107,6 +96,7 @@ public class KeyPanelScreen extends Screen {
         }
         if (PanelStyle.color() != -1 && (PanelStyle.color() >>> 24) == 0) {
             PanelStyle.setColor(PanelStyle.color() | 0xFF000000);
+            PanelStyle.save();   // setColor 只改内存，迁移结果这里显式落盘
         }
         if (changed) {
             saveSlots();
@@ -131,14 +121,6 @@ public class KeyPanelScreen extends Screen {
         gap = t[2];
         pad = t[3];
         iconScale = t[4];
-        panelU = t[5];
-        panelV = t[6];
-        cardUNormal = t[7];
-        cardVNormal = t[8];
-        cardUHover = t[9];
-        cardVHover = t[10];
-        cardUEmpty = t[11];
-        cardVEmpty = t[12];
     }
 
     private void applyTier() {
@@ -300,27 +282,6 @@ public class KeyPanelScreen extends Screen {
         KeyPanelMod.LOGGER.info("[key_panel] swap slot {} <-> {}", a, b);
     }
 
-    private String moveHint() {
-        if (bgTarget) {
-            int c = PanelStyle.color();
-            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default_look").getString() : String.format("#%08X", c);
-            return Component.translatable("key_panel.panel.hint.bg", hex).getString();
-        }
-        if (selectedSlot >= 0 && selectedSlot < slots.size()) {
-            int c = slots.get(selectedSlot).getColor();
-            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default").getString() : String.format("#%08X", c);
-            return Component.translatable("key_panel.panel.hint.slot", String.valueOf(selectedSlot + 1), hex).getString();
-        }
-        return moveSource < 0 ? Component.translatable("key_panel.panel.hint.edit").getString() : Component.translatable("key_panel.panel.hint.move").getString();
-    }
-
-    /** 按切角形状铺底色：上中下三块，四个角留给描边，避免方角露在切角外面。 */
-    private static void fillChamfered(GuiGraphics g, int x, int y, int w, int h, int c, int color) {
-        g.fill(x + c, y, x + w - c, y + c, color);
-        g.fill(x, y + c, x + w, y + h - c, color);
-        g.fill(x + c, y + h - c, x + w - c, y + h, color);
-    }
-
     private void drawPanel(GuiGraphics g) {
         drawPanelBackground(g);
     }
@@ -398,15 +359,18 @@ public class KeyPanelScreen extends Screen {
 
     private static KeyMapping virtualHolder;
     private static com.mojang.blaze3d.platform.InputConstants.Key virtualHolderOriginal;
+    private static KeyModifier virtualHolderOriginalModifier = KeyModifier.NONE;
 
     static void restoreVirtualHolder() {
         if (virtualHolder != null && virtualHolderOriginal != null) {
-            KeyCompat.setKeyModifierAndCode(virtualHolder, KeyModifier.NONE, virtualHolderOriginal);
+            // B1：修饰键一起还原，否则玩家带 Shift / Ctrl / Alt 的绑定会被永久改成裸键
+            KeyCompat.setKeyModifierAndCode(virtualHolder, virtualHolderOriginalModifier, virtualHolderOriginal);
             virtualHolder.setDown(false);
             KeyMapping.resetMapping();
         }
         virtualHolder = null;
         virtualHolderOriginal = null;
+        virtualHolderOriginalModifier = KeyModifier.NONE;
     }
 
     /** 面板关闭时确保虚拟键的临时改绑已还原。 */
@@ -414,6 +378,12 @@ public class KeyPanelScreen extends Screen {
     public void removed() {
         super.removed();
         restoreVirtualHolder();
+        if (sliderDrag >= 0) {
+            // 松手事件没等到就离开了界面：补一次落盘，避免拖动结果丢失（C1：仍不是每帧写盘）
+            sliderDrag = -1;
+            saveSlots();
+            PanelStyle.save();
+        }
     }
 
     private static boolean rebindToVirtual(KeyMapping mapping, KeyMapping virtual) {
@@ -425,8 +395,9 @@ public class KeyPanelScreen extends Screen {
         }
         restoreVirtualHolder();
         virtualHolderOriginal = KeyCompat.keyOf(mapping);
+        virtualHolderOriginalModifier = KeyCompat.modifierOf(mapping);   // B1：Key 与修饰键一起存
         virtualHolder = mapping;
-        KeyCompat.setKeyModifierAndCode(mapping, KeyModifier.NONE, KeyCompat.keyOf(virtual));
+        KeyCompat.setKeyModifierAndCode(mapping, KeyCompat.modifierOf(virtual), KeyCompat.keyOf(virtual));
         mapping.setDown(false);
         KeyMapping.resetMapping();
         return true;
@@ -499,13 +470,6 @@ public class KeyPanelScreen extends Screen {
                 moveMode ? 0xFF3E8A8C : 0xFFBFFFFF, false);
     }
 
-    private static int brighter(int rgb) {
-        int r = Math.min(255, ((rgb >> 16) & 0xFF) + 60);
-        int g = Math.min(255, ((rgb >> 8) & 0xFF) + 60);
-        int b = Math.min(255, (rgb & 0xFF) + 60);
-        return (r << 16) | (g << 8) | b;
-    }
-
     private void drawPanelBackground(GuiGraphics g) {
         // 统一走 PanelFrame：底色/壁纸按切角裁，和背景选择界面、附属卡片同一套逻辑
         PanelFrame.drawBackground(g, panelX, panelY, panelW, panelH,
@@ -576,19 +540,24 @@ public class KeyPanelScreen extends Screen {
         return new int[]{x, stripTop() + 16, x + 64, stripTop() + 80};
     }
 
+    /** 第 i 行滑块的轨道顶边 Y：绘制与命中判定共用，保证两处坐标同源。 */
+    private int sliderRowY(int i) {
+        return stripTop() + 14 + i * 20;
+    }
+
     private int sliderAt(double mx, double my) {
         if (!moveMode) {
             return -1;
         }
         int tx = sliderTrackX();
         int tw = sliderTrackW();
-        int top = stripTop();
         if (mx < tx - 8 || mx > tx + tw + 8) {
             return -1;
         }
         for (int i = 0; i < 4; i++) {
-            int y = top + 14 + i * 20;
-            if (my >= y - 7 && my < y + 15) {
+            int y = sliderRowY(i);
+            // 命中区间 20px（行距也是 20px）：与相邻行严格不重叠，又完整覆盖轨道与滑块
+            if (my >= y - 6 && my < y + 14) {
                 return i;
             }
         }
@@ -637,7 +606,7 @@ public class KeyPanelScreen extends Screen {
         int tx = sliderTrackX();
         int tw = sliderTrackW();
         for (int i = 0; i < 4; i++) {
-            int y = top + 14 + i * 20;
+            int y = sliderRowY(i);
             int alpha = (shown >>> 24);
             int val = i == 3 ? Math.max(1, alpha) : ((shown >> (16 - i * 8)) & 0xFF);
             String letter = i == 0 ? "R" : (i == 1 ? "G" : (i == 2 ? "B" : "A"));
@@ -687,39 +656,6 @@ public class KeyPanelScreen extends Screen {
     }
 
 
-
-    private static int cornerInset(int row, int height, int r) {
-        if (row < r) {
-            return r - row - 1;
-        }
-        if (row >= height - r) {
-            return r - (height - row - 1) - 1;
-        }
-        return 0;
-    }
-
-    private static void outlineRounded(GuiGraphics g, int x, int y, int w, int h, int r, int color) {
-        for (int i = 0; i < h; i++) {
-            int inset = cornerInset(i, h, r);
-            if (i == 0 || i == h - 1) {
-                g.fill(x + inset, y + i, x + w - inset, y + i + 1, color);
-                continue;
-            }
-            g.fill(x + inset, y + i, x + inset + 1, y + i + 1, color);
-            g.fill(x + w - inset - 1, y + i, x + w - inset, y + i + 1, color);
-        }
-    }
-
-    private static int lerpColor(int a, int b, float t) {
-        t = Math.max(0.0F, Math.min(1.0F, t));
-        int aa = (a >>> 24) & 0xFF, ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
-        int ba = (b >>> 24) & 0xFF, br = (b >> 16) & 0xFF, bg = (b >> 8) & 0xFF, bb = b & 0xFF;
-        int ca = (int) (aa + (ba - aa) * t);
-        int cr = (int) (ar + (br - ar) * t);
-        int cg = (int) (ag + (bg - ag) * t);
-        int cb = (int) (ab + (bb - ab) * t);
-        return (ca << 24) | (cr << 16) | (cg << 8) | cb;
-    }
 
     private int cardAt(double mouseX, double mouseY) {
         for (int i = 0; i < COLS * ROWS; i++) {
@@ -938,6 +874,7 @@ public class KeyPanelScreen extends Screen {
                 rebound && virtual != null ? KeyCompat.keyOf(virtual) : KeyCompat.keyOf(mapping);
         if (key == com.mojang.blaze3d.platform.InputConstants.UNKNOWN) {
             KeyPanelMod.LOGGER.info("[key_panel] 槽位 {} 的目标功能没有可用键码，跳过模拟", data.getIndex());
+            restoreVirtualHolder();   // B4：早退前还原，否则目标键位会卡在虚拟键上
             return;
         }
         int before = KeyCompat.readClickCount(mapping);

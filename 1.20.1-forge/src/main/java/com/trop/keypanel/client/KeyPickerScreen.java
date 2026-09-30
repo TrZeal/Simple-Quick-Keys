@@ -39,6 +39,10 @@ public class KeyPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        // init() 在窗口/GUI 缩放时会重跑：累积字段先清空，否则列表会成倍增长。
+        this.all.clear();
+        this.filtered.clear();
+        this.hovered = -1;
         for (KeyMapping mapping : Minecraft.getInstance().options.keyMappings) {
             if (mapping.getName() != null && !mapping.getName().isEmpty()) {
                 all.add(mapping);
@@ -85,10 +89,15 @@ public class KeyPickerScreen extends Screen {
 
     private int barHeight() {
         int trackH = ROWS * ROW_H;
-        return Math.max(12, trackH * ROWS / Math.max(1, filtered.size()));
+        // 上限收在 trackH - 1：功能数极多时 trackH * ROWS / size 会等于 trackH，
+        // 那样下面分母 (trackH - barH) 就是 0，拖动时直接除零崩溃。
+        return Math.min(trackH - 1, Math.max(12, trackH * ROWS / Math.max(1, filtered.size())));
     }
 
     private void dragTo(double mouseY) {
+        if (filtered.isEmpty()) {
+            return;   // 搜索无结果时下面没有可算的比例，直接返回（与 ItemPickerScreen 同样的除零防护）
+        }
         int trackH = ROWS * ROW_H;
         int barH = barHeight();
         double t = (mouseY - listTop() - barH / 2.0D) / Math.max(1.0D, trackH - barH);
@@ -103,9 +112,16 @@ public class KeyPickerScreen extends Screen {
         Minecraft.getInstance().setScreen(parent);
     }
 
+    /**
+     * 本模组界面自己画背景：1.20.1 的原版实现会铺一层纵向暗化渐变，
+     * 手写调用 + super.render 内部再调一次会让暗化层压在自己的面板之上（面板偏暗、按钮亮）。
+     */
+    @Override
+    public void renderBackground(GuiGraphics g) {
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g);
         int totalW = LIST_W + 24;
         int totalH = ROWS * ROW_H + 76;
         g.fill(panelX, panelY, panelX + totalW, panelY + totalH, 0xF0060A0B);
@@ -147,7 +163,7 @@ public class KeyPickerScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0
+        if (button == 0 && filtered.size() > ROWS
                 && mouseX >= barX() - 2 && mouseX < barX() + 9
                 && mouseY >= listTop() && mouseY < listTop() + ROWS * ROW_H) {
             this.draggingBar = true;

@@ -70,8 +70,19 @@ public class BackgroundPickerScreen extends Screen {
     private void rescan() {
         files.clear();
         files.add("");
+        PanelStyle.clearThumbFailures();   // 目录里可能换了新图，给之前读不动的文件一次重试机会
         files.addAll(PanelStyle.listImages());
         scroll = Math.max(0, Math.min(maxScroll(), scroll));
+    }
+
+    /**
+     * 关闭界面时释放缩略图贴图：不释放的话每张缩略图会一直占着显存直到退出游戏。
+     * 下次进来 init() 会重新读一遍（命中失败缓存的坏图不会再重试）。
+     */
+    @Override
+    public void removed() {
+        super.removed();
+        PanelStyle.releaseThumbs();
     }
 
     private int maxScroll() {

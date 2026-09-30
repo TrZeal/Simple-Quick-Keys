@@ -5,6 +5,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.client.extensions.IForgeKeyMapping;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -83,7 +84,10 @@ public final class KeyPanelClientEvents {
         if (event.getAction() != GLFW.GLFW_PRESS) {
             return;
         }
-        if (!KeyBindings.OPEN_PANEL.matches(event.getKey(), event.getScanCode())) {
+        // 带修饰键的判定：KeyMapping#matches 只比键码，设了 Shift+G 之后裸 G 也会开面板。
+        // Forge 的 isActiveAndMatches 会一起校验键码、冲突上下文与 KeyModifier（Shift/Ctrl/Alt）。
+        if (!((IForgeKeyMapping) KeyBindings.OPEN_PANEL).isActiveAndMatches(
+                com.mojang.blaze3d.platform.InputConstants.getKey(event.getKey(), event.getScanCode()))) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();

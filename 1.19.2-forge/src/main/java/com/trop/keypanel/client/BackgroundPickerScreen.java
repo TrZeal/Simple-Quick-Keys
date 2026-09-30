@@ -89,16 +89,29 @@ public class BackgroundPickerScreen extends Screen {
             com.trop.keypanel.KeyPanelMod.LOGGER.warn("[key_panel] 创建背景图目录失败：{}", e.toString());
         }
         String path = dir.toAbsolutePath().toString();
+        // 界面上、日志里都只显示相对目录名，不带本机绝对路径（日志脱敏）
+        String shown = dirName();
         if (tryDesktop(dir) || trySystemOpener(path)) {
-            status = Component.translatable("key_panel.bg.opened", path).getString();
+            status = Component.translatable("key_panel.bg.opened", shown).getString();
             return;
         }
         try {
             Minecraft.getInstance().keyboardHandler.setClipboard(path);
         } catch (Throwable ignored) {
         }
-        status = Component.translatable("key_panel.bg.open_failed", path).getString();
-        com.trop.keypanel.KeyPanelMod.LOGGER.warn("[key_panel] 无法自动打开目录，已复制路径：{}", path);
+        status = Component.translatable("key_panel.bg.open_failed", shown).getString();
+        com.trop.keypanel.KeyPanelMod.LOGGER.warn("[key_panel] 无法自动打开目录（{}），已复制路径到剪贴板", shown);
+    }
+
+    /** 背景图目录的相对显示名，形如 {@code config/key_panel/backgrounds}。 */
+    private static String dirName() {
+        try {
+            return net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.relative()
+                    .resolve(com.trop.keypanel.KeyPanelMod.MODID).resolve("backgrounds")
+                    .toString().replace('\\', '/');
+        } catch (Throwable t) {
+            return "backgrounds";
+        }
     }
 
     private boolean tryDesktop(java.nio.file.Path dir) {
@@ -157,7 +170,6 @@ public class BackgroundPickerScreen extends Screen {
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
         com.mojang.blaze3d.systems.RenderSystem.enableBlend();
         com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
-        this.renderBackground(poseStack);
         PanelFrame.drawBackground(poseStack, panelX, panelY, panelW, panelH, 0xB00A0E0F);
         GuiCompat.drawString(poseStack, this.font, Component.translatable("key_panel.bg.hint").getString(),
                 panelX + PAD, panelY + 10, 0xFFBFFFFF);
@@ -196,7 +208,7 @@ public class BackgroundPickerScreen extends Screen {
         }
 
         String bottom = status.isEmpty()
-                ? Component.translatable("key_panel.bg.dir", PanelStyle.imageDir().toString()).getString()
+                ? Component.translatable("key_panel.bg.dir", dirName()).getString()
                 : status;
         GuiCompat.drawString(poseStack, this.font, this.font.plainSubstrByWidth(bottom, panelW - PAD * 2),
                 panelX + PAD, panelY + panelH - 40, status.isEmpty() ? 0xFF6FA8A8 : 0xFF8FF7F7);
@@ -210,9 +222,17 @@ public class BackgroundPickerScreen extends Screen {
         // 把切角四角压成方的（渲染顺序问题）。
     }
 
+    /** 关界面时把缩略图纹理一起释放：它们只在选图界面里用，留着白占显存。 */
+    @Override
+    public void removed() {
+        super.removed();
+        PanelStyle.releaseThumbs();
+    }
+
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && hovered >= 0 && hovered < files.size()) {
+        // 只有画了缩略图的那几格才可点（空格的"没图"提示点了不该触发选择）
+        if (button == 0 && hovered >= 0 && hovered < files.size() && !files.get(hovered).isEmpty()) {
             String name = files.get(hovered);
             PanelStyle.setImage(name.equals(PanelStyle.imageName()) ? "" : name);
             back();

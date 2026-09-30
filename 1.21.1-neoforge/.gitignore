@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+out/
+# 本地依赖 jar（体积大，且受各上游许可限制，不随仓库分发）
+libs/
+# IDE
+.idea/
+*.iml
+.vscode/
+.eclipse/
+.settings/
+.classpath
+.project
+# 运行目录
+run/
+runs/
+# 系统
+.DS_Store
+Thumbs.db

@@ -26,20 +26,27 @@ import java.util.List;
  */
 public class KeyPanelScreen extends Screen {
 
-    private static final ResourceLocation TEX2 =
+    private final ResourceLocation cardTex =
             ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel_v2.png");
-    private static final int TEX2_W = 512;
-    private static final int TEX2_H = 512;
+    private static final int CARD_TEX_W = 512;
+    private static final int CARD_TEX_H = 512;
     /** v2 图集里三档卡片的列偏移。 */
     private static final int[] CARD_X = {0, 50, 92};
     private int tierIndex;
 
     private static final int COLS = 9;
     private static final int ROWS = 3;
+    /**
+     * 三档尺寸：卡片宽、卡片高、间距、图标缩放。
+     * <p>
+     * 旧版这里还带着一列列图集坐标（490, 0 / 62 / 124 …），其中 490 + 46 已经越过
+     * 512 的图集宽度；真实 UV 现在由 {@link #CARD_X} + 行号在 {@code drawCards} 里定位，
+     * 那几列早已不参与绘制，故删除。
+     */
     private static final int[][] TIERS = {
-            {46, 54, 4, 14, 2, 0, 0, 490, 0, 490, 62, 490, 124},
-            {40, 48, 3, 10, 2, 0, 230, 490, 190, 490, 244, 490, 298},
-            {34, 40, 2, 8, 1, 0, 430, 490, 360, 490, 406, 490, 452},
+            {46, 54, 4, 2},
+            {40, 48, 3, 2},
+            {34, 40, 2, 1},
     };
     private static final int PAGEBAR = 22;
 
@@ -48,18 +55,7 @@ public class KeyPanelScreen extends Screen {
     private int gap = TIERS[0][2];
     private int gapX = TIERS[0][2];
     private int gapY = TIERS[0][2];
-    private int pad = TIERS[0][3];
-    private int iconScale = TIERS[0][4];
-    // 分档表里的旧图集坐标列：v1.1 的卡片改由 TEX2 的 CARD_X + 行号定位，
-    // 这几列保留下来只为让 TIERS 表结构与旧版一致（不再参与绘制）。
-    private int panelU;
-    private int panelV;
-    private int cardUNormal;
-    private int cardUEmpty;
-    private int cardUHover;
-    private int cardVNormal;
-    private int cardVEmpty;
-    private int cardVHover;
+    private int iconScale = TIERS[0][3];
     private int panelW;
     private int panelH;
 
@@ -131,16 +127,7 @@ public class KeyPanelScreen extends Screen {
         cardW = t[0];
         cardH = t[1];
         gap = t[2];
-        pad = t[3];
-        iconScale = t[4];
-        panelU = t[5];
-        panelV = t[6];
-        cardUNormal = t[7];
-        cardVNormal = t[8];
-        cardUHover = t[9];
-        cardVHover = t[10];
-        cardUEmpty = t[11];
-        cardVEmpty = t[12];
+        iconScale = t[3];
     }
 
     private void applyTier() {
@@ -152,7 +139,6 @@ public class KeyPanelScreen extends Screen {
                 cardW = t[0];
                 cardH = t[1];
                 gap = t[2];
-                pad = t[3];
                 applyTierFields(t);
                 tierIndex = 0;
                 for (int k = 0; k < TIERS.length; k++) {
@@ -169,7 +155,6 @@ public class KeyPanelScreen extends Screen {
         cardW = t[0];
         cardH = t[1];
         gap = t[2];
-        pad = t[3];
         applyTierFields(t);
         tierIndex = TIERS.length - 1;
         int gw = COLS * t[0] + (COLS - 1) * t[2];
@@ -232,7 +217,6 @@ public class KeyPanelScreen extends Screen {
 
     @Override
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(poseStack);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         this.hovered = cardAt(mouseX, mouseY);
@@ -246,7 +230,7 @@ public class KeyPanelScreen extends Screen {
             migrateAlphaOnce();
         }
         // 每帧自己跟一次拖动：mouseDragged 事件可能中途断掉（拖到一半停住就是这个原因），
-        // 这里用当前鼠标位置继续调，松手当帧自动收尾。
+        // 这里用当前鼠标位置继续调，松手当帧自动收尾并落盘一次。
         if (sliderDrag >= 0) {
             long win = Minecraft.getInstance().getWindow().getWindow();
             if (org.lwjgl.glfw.GLFW.glfwGetMouseButton(win, org.lwjgl.glfw.GLFW.GLFW_MOUSE_BUTTON_LEFT) == org.lwjgl.glfw.GLFW.GLFW_PRESS) {
@@ -301,24 +285,6 @@ public class KeyPanelScreen extends Screen {
         KeyPanelMod.LOGGER.info("[key_panel] swap slot {} <-> {}", a, b);
     }
 
-    /** edit 态提示语（全部走翻译键）。 */
-    private String moveHint() {
-        if (bgTarget) {
-            int c = PanelStyle.color();
-            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default_look").getString()
-                    : String.format("#%08X", c);
-            return Component.translatable("key_panel.panel.hint.bg", hex).getString();
-        }
-        if (selectedSlot >= 0 && selectedSlot < slots.size()) {
-            int c = slots.get(selectedSlot).getColor();
-            String hex = c == -1 ? Component.translatable("key_panel.panel.color.default").getString()
-                    : String.format("#%08X", c);
-            return Component.translatable("key_panel.panel.hint.slot", selectedSlot + 1, hex).getString();
-        }
-        return moveSource < 0 ? Component.translatable("key_panel.panel.hint.edit").getString()
-                : Component.translatable("key_panel.panel.hint.move").getString();
-    }
-
     private void drawPanel(PoseStack poseStack) {
         // 统一走 PanelFrame：底色/壁纸按切角裁，和背景选择界面、附属卡片同一套逻辑
         PanelFrame.drawBackground(poseStack, panelX, panelY, panelW, panelH,
@@ -356,8 +322,8 @@ public class KeyPanelScreen extends Screen {
                 cardFill = slotColor;
             }
             PanelFrame.fillChamfered(poseStack, x, drawY, cardW, cardH, 4, cardFill);
-            GuiCompat.blitTexture(poseStack, TEX2, x, drawY, cardW, cardH,
-                    CARD_X[Math.min(tierIndex, 2)], cardV, cardW, cardH, TEX2_W, TEX2_H);
+            GuiCompat.blitTexture(poseStack, cardTex, x, drawY, cardW, cardH,
+                    CARD_X[Math.min(tierIndex, 2)], cardV, cardW, cardH, CARD_TEX_W, CARD_TEX_H);
             if (moveMode && slotIndex == selectedSlot) {
                 GuiCompat.outline(poseStack, x - 1, drawY - 1, cardW + 2, cardH + 2, 0xFFBFFFFF);
             }
@@ -397,15 +363,23 @@ public class KeyPanelScreen extends Screen {
 
     private static KeyMapping virtualHolder;
     private static com.mojang.blaze3d.platform.InputConstants.Key virtualHolderOriginal;
+    private static KeyModifier virtualHolderModifier = KeyModifier.NONE;
 
+    /**
+     * 还原临时改绑：<b>键码与修饰键一起</b>写回。
+     * <p>
+     * 原来只记住了 {@code Key}、还原恒用 {@code KeyModifier.NONE}，
+     * 玩家原来带 Shift / Ctrl / Alt 的绑定会被永久改成裸键（还会写进 options.txt）。
+     */
     static void restoreVirtualHolder() {
         if (virtualHolder != null && virtualHolderOriginal != null) {
-            virtualHolder.setKeyModifierAndCode(KeyModifier.NONE, virtualHolderOriginal);
+            KeyCompat.setKeyModifierAndCode(virtualHolder, virtualHolderModifier, virtualHolderOriginal);
             virtualHolder.setDown(false);
             KeyMapping.resetMapping();
         }
         virtualHolder = null;
         virtualHolderOriginal = null;
+        virtualHolderModifier = KeyModifier.NONE;
     }
 
     /** 面板关闭时确保虚拟键的临时改绑已还原。 */
@@ -413,10 +387,11 @@ public class KeyPanelScreen extends Screen {
     public void removed() {
         super.removed();
         restoreVirtualHolder();
+        KeyPanelClientEvents.clearPendingCountCheck();
     }
 
-    private static boolean rebindToVirtual(KeyMapping mapping, KeyMapping virtual) {
-        if (virtual == null || mapping == null) {
+    private static boolean rebindToVirtual(KeyMapping mapping, com.mojang.blaze3d.platform.InputConstants.Key virtualKey) {
+        if (virtualKey == null || mapping == null) {
             return false;
         }
         if (mapping == virtualHolder) {
@@ -424,8 +399,14 @@ public class KeyPanelScreen extends Screen {
         }
         restoreVirtualHolder();
         virtualHolderOriginal = mapping.getKey();
+        virtualHolderModifier = KeyCompat.getModifier(mapping);
         virtualHolder = mapping;
-        mapping.setKeyModifierAndCode(KeyModifier.NONE, virtual.getKey());
+        if (!KeyCompat.setKeyModifierAndCode(mapping, KeyModifier.NONE, virtualKey)) {
+            virtualHolder = null;
+            virtualHolderOriginal = null;
+            virtualHolderModifier = KeyModifier.NONE;
+            return false;
+        }
         mapping.setDown(false);
         KeyMapping.resetMapping();
         return true;
@@ -492,8 +473,8 @@ public class KeyPanelScreen extends Screen {
         GuiCompat.drawString(poseStack, this.font, txt, panelX + (panelW - this.font.width(txt)) / 2, cy - 4,
                 moveMode ? 0xFF8FF7F7 : COL_HINT);
         int[] mb = moveButtonRect();
-        GuiCompat.blitTexture(poseStack, TEX2, mb[0], mb[1], 84, 18, moveMode ? 100 : 0, 240, 96, 20,
-                TEX2_W, TEX2_H);
+        GuiCompat.blitTexture(poseStack, cardTex, mb[0], mb[1], 84, 18, moveMode ? 100 : 0, 240, 96, 20,
+                CARD_TEX_W, CARD_TEX_H);
         String label = Component.translatable("key_panel.panel.edit").getString();
         GuiCompat.drawString(poseStack, this.font, label, mb[0] + (84 - this.font.width(label)) / 2, mb[1] + 5,
                 moveMode ? 0xFF3E8A8C : 0xFFBFFFFF);
@@ -558,9 +539,10 @@ public class KeyPanelScreen extends Screen {
         return first;
     }
 
+    /** 拖滑块只改内存，落盘统一在松手时做一次（原来每帧写一次 background.json，约 60 次/秒）。 */
     private void setTargetColor(int rgb) {
         if (bgTarget) {
-            PanelStyle.setColor(rgb);
+            PanelStyle.setColorInMemory(rgb);
         } else {
             for (SlotData d : slots) {
                 d.setColor(rgb);
@@ -614,12 +596,14 @@ public class KeyPanelScreen extends Screen {
         int tx = sliderTrackX();
         int tw = sliderTrackW();
         int top = stripTop();
-        if (mx < tx - 8 || mx > tx + tw + 8) {
+        if (tw < 2 || mx < tx - 8 || mx > tx + tw + 8) {
             return -1;
         }
         for (int i = 0; i < 4; i++) {
+            // 行高 20、命中高度 14（y-3 ~ y+11），相邻两行不重叠：
+            // 原来 y-7 ~ y+15 有 2px 叠在一起，点在叠区会选到上面那一行。
             int y = top + 14 + i * 20;
-            if (my >= y - 7 && my < y + 15) {
+            if (my >= y - 3 && my < y + 11) {
                 return i;
             }
         }
@@ -894,12 +878,14 @@ public class KeyPanelScreen extends Screen {
         }
         // 触发方式：先把本格对应的虚拟键临时绑定到目标功能上，再把这个键交给原版按键入口处理，
         // 由原版完成点击计数、按下状态与按键匹配（详见 KeyPanelClientEvents#fireKeyEvent）。
-        KeyMapping virtual = KeyBindings.virtual(data.getIndex());
-        boolean rebound = rebindToVirtual(mapping, virtual);
-        com.mojang.blaze3d.platform.InputConstants.Key key =
-                rebound && virtual != null ? virtual.getKey() : mapping.getKey();
+        // 虚拟键只造 InputConstants.Key，不建占位 KeyMapping：1.19.2 的 KeyMapping.click(Key)
+        // 是 MAP.get(key)（同键位只取第一个），占位映射会把点击吞掉。详见 KeyBindings#virtualKey。
+        com.mojang.blaze3d.platform.InputConstants.Key virtualKey = KeyBindings.virtualKey(data.getIndex());
+        boolean rebound = rebindToVirtual(mapping, virtualKey);
+        com.mojang.blaze3d.platform.InputConstants.Key key = rebound ? virtualKey : mapping.getKey();
         if (key == com.mojang.blaze3d.platform.InputConstants.UNKNOWN) {
             KeyPanelMod.LOGGER.info("[key_panel] 槽位 {} 的目标功能没有可用键码，跳过模拟", data.getIndex());
+            restoreVirtualHolder();
             return;
         }
         int before = KeyCompat.readClickCount(mapping);
@@ -908,8 +894,12 @@ public class KeyPanelScreen extends Screen {
         // 原版入口处理完毕后立即还原，使该功能在「按键设置」中的键位始终保持不变。
         restoreVirtualHolder();
         KeyPanelClientEvents.pressTemporarily(mapping);   // 还原后继续维持按下状态，供长按类功能使用
-        KeyPanelMod.LOGGER.info("[key_panel] 模拟按键 {} → {}（clickCount {} -> {}）",
-                key.getName(), data.getKeyBinding(), before, KeyCompat.readClickCount(mapping));
+        int after = KeyCompat.readClickCount(mapping);
+        // 1.19.2 的点击计数要等下一次 client tick 的 handleKeybinds 才会 +1，本帧读到的必然没变。
+        // 所以这里只把「发键前」的基线交给事件类，两 tick 后再判定；真没加上才补一次计数。
+        KeyPanelClientEvents.scheduleCountCheck(mapping, before);
+        KeyPanelMod.LOGGER.info("[key_panel] 模拟按键 {} → {}（clickCount {} -> {}，待 tick 后复核）",
+                key.getName(), data.getKeyBinding(), before, after);
     }
 
     public void saveSlots() {

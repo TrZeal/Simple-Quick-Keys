@@ -53,26 +53,28 @@ public class KeyPanelEditScreen extends Screen {
         this.itemBox = new EditBox(this.font, x0 + 74, y0 + 24, 118, 16, Component.translatable("key_panel.edit.item_id"));
         this.itemBox.setMaxLength(96);
         this.itemBox.setValue(data.getItemId() == null ? "" : data.getItemId());
-        this.itemBox.setResponder(text -> data.setItemId(text));
+        // 回写统一 trim：原来「保存」会 trim、「返回」不 trim，文本带首尾空格时
+        // 两个入口存下来的值不一样，item_id 解析失败卡片就没图标。
+        this.itemBox.setResponder(text -> data.setItemId(text.trim()));
         this.addRenderableWidget(this.itemBox);
 
         this.nameBox = new EditBox(this.font, x0 + 74, y0 + 46, 178, 16, Component.translatable("key_panel.edit.name"));
         this.nameBox.setMaxLength(32);
         this.nameBox.setValue(data.getCustomName() == null ? "" : data.getCustomName());
-        this.nameBox.setResponder(text -> data.setCustomName(text));
+        this.nameBox.setResponder(text -> data.setCustomName(text.trim()));
         this.addRenderableWidget(this.nameBox);
 
         this.keyBox = new EditBox(this.font, x0 + 74, y0 + 68, 118, 16, Component.translatable("key_panel.edit.key_id"));
         this.keyBox.setMaxLength(64);
         this.keyBox.setValue(data.getKeyBinding() == null ? "" : data.getKeyBinding());
-        this.keyBox.setResponder(text -> data.setKeyBinding(text));
+        this.keyBox.setResponder(text -> data.setKeyBinding(text.trim()));
         this.addRenderableWidget(this.keyBox);
 
         this.cmdBox = new EditBox(this.font, x0 + 74, y0 + 90, 178, 16, Component.translatable("key_panel.edit.command"));
         this.cmdBox.setMaxLength(128);
         this.cmdBox.setValue(data.getCommand());
         this.cmdBox.setResponder(text -> {
-            data.setCommand(text);
+            data.setCommand(text.trim());
             refreshSuggestions(text);
         });
         this.addRenderableWidget(this.cmdBox);
@@ -178,7 +180,6 @@ public class KeyPanelEditScreen extends Screen {
             this.cmdBox.setValue(data.getCommand());
         }
 
-        this.renderBackground(poseStack);
         blitTexture(poseStack, TEXTURE, x0 - PAD, y0 - PAD, BG_W, BG_H, BG_U, BG_V, BG_W, BG_H, TEX_W, TEX_H);
         GuiCompat.drawString(poseStack, this.font,
                 Component.translatable("key_panel.edit.title", data.getIndex() + 1).getString(),
@@ -210,7 +211,9 @@ public class KeyPanelEditScreen extends Screen {
                 fill(poseStack, r[0], r[1], r[2], r[3], (hover || picked) ? 0xFF17484E : 0xE0060A0B);
                 outline(poseStack, r[0], r[1], r[2] - r[0], r[3] - r[1],
                         (hover || picked) ? 0xFF45F0F0 : 0x662FD9D9);
-                drawString(poseStack, this.font, this.suggestions.get(i), r[0] + 4, r[1] + 2,
+                // 必须显式限定 GuiCompat.：Screen 从 GuiComponent 继承来的同名 drawString
+                // 会遮蔽静态导入，画出来是带阴影的，和本模组其它界面的文字不一致。
+                GuiCompat.drawString(poseStack, this.font, this.suggestions.get(i), r[0] + 4, r[1] + 2,
                         (hover || picked) ? 0xFFBFFFFF : 0xFF9FC4C4);
             }
             if (this.suggestions.size() > SUGGEST_VISIBLE) {
@@ -224,6 +227,12 @@ public class KeyPanelEditScreen extends Screen {
             }
             poseStack.popPose();
         }
+    }
+
+    @Override
+    public void renderBackground(PoseStack poseStack) {
+        // 本模组界面自己画背景：不叠加原版的暗化层，否则它会盖在面板之上，
+        // 把切角四角压成方的（渲染顺序问题）。
     }
 
     @Override
@@ -261,18 +270,21 @@ public class KeyPanelEditScreen extends Screen {
         if (keyCode == 258 && !this.suggestions.isEmpty()) {
             boolean back = (modifiers & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0;
             int n = this.suggestions.size();
+            // suggestionIndex 初始是 -1（还没选过）：直接 (idx - 1 + n) % n 会算成 n-2，
+            // 于是 Shift+Tab 第一次按下会跳过最后一项。先归一到 0，再统一用 floorMod 回绕。
+            int cur = this.suggestionIndex < 0 ? 0 : this.suggestionIndex;
             this.suggestionIndex = back
-                    ? (this.suggestionIndex - 1 + n) % n
-                    : (this.suggestionIndex + 1) % n;
+                    ? Math.floorMod(cur - 1, n)
+                    : Math.floorMod(cur + 1, n);
             if (this.suggestionIndex < this.suggestionScroll) {
                 this.suggestionScroll = this.suggestionIndex;
             } else if (this.suggestionIndex >= this.suggestionScroll + SUGGEST_VISIBLE) {
                 this.suggestionScroll = this.suggestionIndex - SUGGEST_VISIBLE + 1;
             }
             String pick = this.suggestions.get(this.suggestionIndex);
-            String cur = this.cmdBox.getValue();
-            int space = cur.lastIndexOf(' ');
-            String prefix = space >= 0 ? cur.substring(0, space + 1) : "";
+            String current = this.cmdBox.getValue();
+            int space = current.lastIndexOf(' ');
+            String prefix = space >= 0 ? current.substring(0, space + 1) : "";
             this.cmdBox.setValue(prefix + pick);
             return true;
         }

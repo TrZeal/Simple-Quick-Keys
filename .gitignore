@@ -4,6 +4,9 @@ build/
 run/
 runs/
 out/
+libs/
+tmp/
+*.log
 
 # IDE
 .idea/

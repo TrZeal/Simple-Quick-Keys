@@ -46,6 +46,13 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        // B2：窗口/GUI 缩放会二次调用 init()，先清空累积字段，避免列表翻倍
+        this.all.clear();
+        this.names.clear();
+        this.filtered.clear();
+        this.scroll = 0;
+        this.hovered = -1;
+        this.draggingBar = false;
         for (Item item : BuiltInRegistries.ITEM) {
             if (item == Items.AIR) {
                 continue;
@@ -100,8 +107,12 @@ public class ItemPickerScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // B3：本模组界面自己画背景；手写调用 + super.render 内部调用会叠两次，这里留空实现
+    }
+
+    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g, mouseX, mouseY, partialTick);
         g.fill(panelX, panelY, panelX + gridW + 24, panelY + gridH + 92, 0xF0060A0B);
         g.renderOutline(panelX, panelY, gridW + 24, gridH + 92, 0xFF2FD9D9);
         g.drawString(this.font, Component.translatable("key_panel.item.title").getString(), panelX + 12, panelY + 10, 0xFFBFFFFF, false);
@@ -157,7 +168,10 @@ public class ItemPickerScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int barX = panelX + 12 + gridW + 3;
-        if (button == 0 && mouseX >= barX && mouseX < barX + 6 && mouseY >= gridY0() && mouseY < gridY0() + gridH) {
+        int barRows = (filtered.size() + COLS - 1) / COLS;
+        // 与 render 的保护一致：没有滚动条时（rows <= ROWS）不响应滚动条点击
+        if (button == 0 && barRows > ROWS
+                && mouseX >= barX && mouseX < barX + 6 && mouseY >= gridY0() && mouseY < gridY0() + gridH) {
             this.draggingBar = true;
             dragTo(mouseY);
             return true;
@@ -192,6 +206,9 @@ public class ItemPickerScreen extends Screen {
 
     private void dragTo(double mouseY) {
         int rows = (filtered.size() + COLS - 1) / COLS;
+        if (rows <= 0) {
+            return;   // 搜索无结果时 rows == 0，下面 gridH * ROWS / rows 会除零崩溃
+        }
         int barH = Math.max(14, gridH * ROWS / rows);
         double t = (mouseY - gridY0() - barH / 2.0D) / Math.max(1.0D, gridH - barH);
         this.scroll = Math.max(0, Math.min(maxScroll(), (int) Math.round(t * maxScroll())));

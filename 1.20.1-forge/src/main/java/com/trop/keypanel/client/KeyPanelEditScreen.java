@@ -12,7 +12,7 @@ public class KeyPanelEditScreen extends Screen {
     private static final int H = 158;
     private static final int PAD = 16;
     private static final net.minecraft.resources.ResourceLocation TEXTURE =
-            new net.minecraft.resources.ResourceLocation("key_panel", "textures/gui/key_panel.png");
+            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel.png");
     private static final int TEX_W = 1024;
     private static final int TEX_H = 1024;
     private static final int BG_U = 700;
@@ -140,10 +140,7 @@ public class KeyPanelEditScreen extends Screen {
     }
 
     private void save() {
-        data.setItemId(this.itemBox.getValue().trim());
-        data.setCustomName(this.nameBox.getValue().trim());
-        data.setKeyBinding(this.keyBox.getValue().trim());
-        data.setCommand(this.cmdBox.getValue().trim());
+        writeBack();
         if (this.parent != null) {
             this.parent.saveSlots();
             this.minecraft.setScreen(this.parent);
@@ -152,13 +149,34 @@ public class KeyPanelEditScreen extends Screen {
         }
     }
 
+    /**
+     * 把输入框回写进 {@link SlotData}：统一 trim。
+     * 「保存」和「返回」都必须走这里，否则文本带首尾空格时两条路径落盘的内容不一致，
+     * item_id 解析失败会让卡片丢掉图标。
+     */
+    private void writeBack() {
+        data.setItemId(this.itemBox.getValue().trim());
+        data.setCustomName(this.nameBox.getValue().trim());
+        data.setKeyBinding(this.keyBox.getValue().trim());
+        data.setCommand(this.cmdBox.getValue().trim());
+    }
+
     private void backToPanel() {
+        writeBack();
         if (this.parent != null) {
             this.parent.saveSlots();
             this.minecraft.setScreen(this.parent);
         } else {
             this.onClose();
         }
+    }
+
+    /**
+     * 本模组界面自己画背景：1.20.1 的原版实现会铺一层纵向暗化渐变，
+     * 手写调用 + super.render 内部再调一次会让暗化层压在自己的面板之上（面板偏暗、按钮亮）。
+     */
+    @Override
+    public void renderBackground(GuiGraphics g) {
     }
 
     @Override
@@ -176,7 +194,6 @@ public class KeyPanelEditScreen extends Screen {
             this.cmdBox.setValue(data.getCommand());
         }
 
-        this.renderBackground(g);
         g.blit(TEXTURE, x0 - PAD, y0 - PAD, BG_W, BG_H, BG_U, BG_V, BG_W, BG_H, TEX_W, TEX_H);
         // 背景贴图里自带一条分隔线，正好从标题中间穿过；先在标题下压一块底色再写字
         String title = Component.translatable("key_panel.edit.title", String.valueOf(data.getIndex() + 1)).getString();
@@ -255,9 +272,10 @@ public class KeyPanelEditScreen extends Screen {
         if (keyCode == 258 && !this.suggestions.isEmpty()) {
             boolean back = (modifiers & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0;
             int n = this.suggestions.size();
-            this.suggestionIndex = back
-                    ? (this.suggestionIndex - 1 + n) % n
-                    : (this.suggestionIndex + 1) % n;
+            // suggestionIndex 初值是 -1（还没选过）：先归一到 0 再取模，
+            // 否则 (idx - 1 + n) % n 在 idx=-1 时得 n-2，Shift+Tab 首次按下会跳过最后一项。
+            int curIdx = Math.max(0, this.suggestionIndex);
+            this.suggestionIndex = Math.floorMod(back ? curIdx - 1 : curIdx + 1, n);
             if (this.suggestionIndex < this.suggestionScroll) {
                 this.suggestionScroll = this.suggestionIndex;
             } else if (this.suggestionIndex >= this.suggestionScroll + SUGGEST_VISIBLE) {

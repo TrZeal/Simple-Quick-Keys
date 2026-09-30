@@ -28,6 +28,7 @@ public class ItemPickerScreen extends Screen {
     private final List<ItemStack> all = new ArrayList<>();
     private final List<ItemStack> filtered = new ArrayList<>();
     private final List<String> names = new ArrayList<>();
+    private final List<String> ids = new ArrayList<>();
 
     private EditBox search;
     private int scroll;
@@ -46,6 +47,12 @@ public class ItemPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        // init() 在窗口/GUI 缩放时会重跑：累积字段先清空，否则列表会成倍增长。
+        this.all.clear();
+        this.filtered.clear();
+        this.names.clear();
+        this.ids.clear();
+        this.hovered = -1;
         for (Item item : BuiltInRegistries.ITEM) {
             if (item == Items.AIR) {
                 continue;
@@ -53,6 +60,7 @@ public class ItemPickerScreen extends Screen {
             ItemStack stack = new ItemStack(item);
             this.all.add(stack);
             this.names.add(stack.getHoverName().getString().toLowerCase(Locale.ROOT));
+            this.ids.add(BuiltInRegistries.ITEM.getKey(item).toString());
         }
         this.gridW = COLS * CELL;
         this.gridH = ROWS * CELL;
@@ -79,8 +87,7 @@ public class ItemPickerScreen extends Screen {
         String q = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         for (int i = 0; i < all.size(); i++) {
             ItemStack stack = all.get(i);
-            if (q.isEmpty() || names.get(i).contains(q)
-                    || BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().contains(q)) {
+            if (q.isEmpty() || names.get(i).contains(q) || ids.get(i).contains(q)) {
                 filtered.add(stack);
             }
         }
@@ -99,9 +106,16 @@ public class ItemPickerScreen extends Screen {
         Minecraft.getInstance().setScreen(parent);
     }
 
+    /**
+     * 本模组界面自己画背景：1.20.1 的原版实现会铺一层纵向暗化渐变，
+     * 手写调用 + super.render 内部再调一次会让暗化层压在自己的面板之上（面板偏暗、按钮亮）。
+     */
+    @Override
+    public void renderBackground(GuiGraphics g) {
+    }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g);
         g.fill(panelX, panelY, panelX + gridW + 24, panelY + gridH + 92, 0xF0060A0B);
         g.renderOutline(panelX, panelY, gridW + 24, gridH + 92, 0xFF2FD9D9);
         g.drawString(this.font, Component.translatable("key_panel.item.title").getString(), panelX + 12, panelY + 10, 0xFFBFFFFF, false);
@@ -128,11 +142,15 @@ public class ItemPickerScreen extends Screen {
         }
         int rows = (filtered.size() + COLS - 1) / COLS;
         if (rows > ROWS) {
-            int barH = Math.max(14, gridH * ROWS / rows);
-            int barY = gridY0() + (gridH - barH) * scroll / Math.max(1, maxScroll());
-            int barX = panelX + 12 + gridW + 3;
-            g.fill(barX, gridY0(), barX + 6, gridY0() + gridH, 0xFF12262A);
-            g.fill(barX, barY, barX + 6, barY + barH, 0xFF45F0F0);
+            // barH 收在 gridH - 1 以内：内容极多时 gridH * ROWS / rows 可能等于 gridH，
+            // 那样下面分母 (gridH - barH) 就是 0，会直接除零崩溃。
+            int barH = Math.min(gridH - 1, Math.max(14, gridH * ROWS / rows));
+            if (barH > 0) {
+                int barY = gridY0() + (gridH - barH) * scroll / Math.max(1, maxScroll());
+                int barX = panelX + 12 + gridW + 3;
+                g.fill(barX, gridY0(), barX + 6, gridY0() + gridH, 0xFF12262A);
+                g.fill(barX, barY, barX + 6, barY + barH, 0xFF45F0F0);
+            }
         }
         super.render(g, mouseX, mouseY, partialTick);
         g.flush();
@@ -157,7 +175,10 @@ public class ItemPickerScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int barX = panelX + 12 + gridW + 3;
-        if (button == 0 && mouseX >= barX && mouseX < barX + 6 && mouseY >= gridY0() && mouseY < gridY0() + gridH) {
+        // 只有内容真的超出可视区（rows > ROWS）时滚动条才存在，与 render 里的保护一致
+        int rows = (filtered.size() + COLS - 1) / COLS;
+        if (button == 0 && rows > ROWS
+                && mouseX >= barX && mouseX < barX + 6 && mouseY >= gridY0() && mouseY < gridY0() + gridH) {
             this.draggingBar = true;
             dragTo(mouseY);
             return true;
@@ -192,7 +213,10 @@ public class ItemPickerScreen extends Screen {
 
     private void dragTo(double mouseY) {
         int rows = (filtered.size() + COLS - 1) / COLS;
-        int barH = Math.max(14, gridH * ROWS / rows);
+        if (rows <= 0) {
+            return;   // 搜索无结果时 maxScroll() 为 0，再往下算 barH 会除零崩溃
+        }
+        int barH = Math.min(gridH - 1, Math.max(14, gridH * ROWS / rows));
         double t = (mouseY - gridY0() - barH / 2.0D) / Math.max(1.0D, gridH - barH);
         this.scroll = Math.max(0, Math.min(maxScroll(), (int) Math.round(t * maxScroll())));
     }

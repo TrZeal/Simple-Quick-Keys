@@ -39,6 +39,12 @@ public class KeyPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        // B2：窗口/GUI 缩放会二次调用 init()，先清空累积字段，避免列表翻倍
+        this.all.clear();
+        this.filtered.clear();
+        this.scroll = 0;
+        this.hovered = -1;
+        this.draggingBar = false;
         for (KeyMapping mapping : Minecraft.getInstance().options.keyMappings) {
             if (mapping.getName() != null && !mapping.getName().isEmpty()) {
                 all.add(mapping);
@@ -104,8 +110,12 @@ public class KeyPickerScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // B3：本模组界面自己画背景；手写调用 + super.render 内部调用会叠两次，这里留空实现
+    }
+
+    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(g, mouseX, mouseY, partialTick);
         int totalW = LIST_W + 24;
         int totalH = ROWS * ROW_H + 76;
         g.fill(panelX, panelY, panelX + totalW, panelY + totalH, 0xF0060A0B);

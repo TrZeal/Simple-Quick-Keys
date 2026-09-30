@@ -42,6 +42,13 @@ public class KeyPickerScreen extends Screen {
 
     @Override
     protected void init() {
+        // init() 会被重复调用（窗口缩放 / GUI 缩放），列表必须先清空，
+        // 否则功能列表会随每次缩放翻一倍。
+        this.all.clear();
+        this.filtered.clear();
+        this.scroll = 0;
+        this.hovered = -1;
+        this.draggingBar = false;
         for (KeyMapping mapping : Minecraft.getInstance().options.keyMappings) {
             if (mapping.getName() != null && !mapping.getName().isEmpty()) {
                 all.add(mapping);
@@ -107,7 +114,8 @@ public class KeyPickerScreen extends Screen {
 
     @Override
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(poseStack);
+        // renderBackground 覆写成空实现（见下方）：原版暗化层会盖在自己的面板之上，
+        // 让面板比按钮暗一档，所以这里不再手写调用它。
         int totalW = LIST_W + 24;
         int totalH = ROWS * ROW_H + 76;
         fill(poseStack, panelX, panelY, panelX + totalW, panelY + totalH, 0xF0060A0B);
@@ -151,8 +159,15 @@ public class KeyPickerScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(PoseStack poseStack) {
+        // 本模组界面自己画背景：不叠加原版的暗化层，否则它会盖在面板之上，
+        // 把切角四角压成方的（渲染顺序问题）。
+    }
+
+    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0
+        // 与 render 里画滚动条的条件一致（filtered.size() > ROWS）：条没画出来就不该能点到
+        if (button == 0 && filtered.size() > ROWS
                 && mouseX >= barX() - 2 && mouseX < barX() + 9
                 && mouseY >= listTop() && mouseY < listTop() + ROWS * ROW_H) {
             this.draggingBar = true;

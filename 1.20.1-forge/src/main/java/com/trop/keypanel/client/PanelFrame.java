@@ -16,7 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 final class PanelFrame {
 
     static final ResourceLocation TEX =
-            new ResourceLocation("key_panel", "textures/gui/key_panel_v2.png");
+            ResourceLocation.fromNamespaceAndPath("key_panel", "textures/gui/key_panel_v2.png");
     private static final int TEX_W = 512;
     private static final int TEX_H = 512;
     static final int PAD = 14;

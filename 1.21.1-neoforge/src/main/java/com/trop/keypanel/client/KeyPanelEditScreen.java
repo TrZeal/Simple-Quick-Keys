@@ -124,6 +124,18 @@ public class KeyPanelEditScreen extends Screen {
         return Math.max(0, suggestions.size() - SUGGEST_VISIBLE);
     }
 
+    /** B7：输入框内容回写统一 trim，「保存」与「返回」落盘的值才一致（否则 item_id 带空格解析失败）。 */
+    private void commitFields() {
+        this.itemBox.setValue(this.itemBox.getValue().trim());
+        this.nameBox.setValue(this.nameBox.getValue().trim());
+        this.keyBox.setValue(this.keyBox.getValue().trim());
+        this.cmdBox.setValue(this.cmdBox.getValue().trim());
+        data.setItemId(this.itemBox.getValue());
+        data.setCustomName(this.nameBox.getValue());
+        data.setKeyBinding(this.keyBox.getValue());
+        data.setCommand(this.cmdBox.getValue());
+    }
+
     private void clearSlot() {
         // 只清空该格子的配置，不修改该功能在「按键设置」中的键位。
         data.setItemId("");
@@ -140,10 +152,7 @@ public class KeyPanelEditScreen extends Screen {
     }
 
     private void save() {
-        data.setItemId(this.itemBox.getValue().trim());
-        data.setCustomName(this.nameBox.getValue().trim());
-        data.setKeyBinding(this.keyBox.getValue().trim());
-        data.setCommand(this.cmdBox.getValue().trim());
+        commitFields();
         if (this.parent != null) {
             this.parent.saveSlots();
             this.minecraft.setScreen(this.parent);
@@ -153,12 +162,18 @@ public class KeyPanelEditScreen extends Screen {
     }
 
     private void backToPanel() {
+        commitFields();   // B7：返回也要 trim，否则卡片按未 trim 的 item_id 解析会没图标
         if (this.parent != null) {
             this.parent.saveSlots();
             this.minecraft.setScreen(this.parent);
         } else {
             this.onClose();
         }
+    }
+
+    @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // B3：本模组界面自己画背景；手写调用 + super.render 内部调用会叠两次，这里留空实现
     }
 
     @Override
@@ -176,7 +191,6 @@ public class KeyPanelEditScreen extends Screen {
             this.cmdBox.setValue(data.getCommand());
         }
 
-        this.renderBackground(g, mouseX, mouseY, partialTick);
         g.blit(TEXTURE, x0 - PAD, y0 - PAD, BG_W, BG_H, BG_U, BG_V, BG_W, BG_H, TEX_W, TEX_H);
         // 背景贴图里自带一条分隔线，正好从标题中间穿过；先在标题下压一块底色再写字
         String title = Component.translatable("key_panel.edit.title", String.valueOf(data.getIndex() + 1)).getString();
@@ -255,9 +269,11 @@ public class KeyPanelEditScreen extends Screen {
         if (keyCode == 258 && !this.suggestions.isEmpty()) {
             boolean back = (modifiers & org.lwjgl.glfw.GLFW.GLFW_MOD_SHIFT) != 0;
             int n = this.suggestions.size();
+            // B6：suggestionIndex == -1（还没选过）时，旧的 (idx-1+n)%n 会得到 n-2 而跳过最后一项；
+            // 后退方向的 -1 先归一到 0（用 Math.floorMod 保证结果非负），前进方向仍从 -1 走到 0。
             this.suggestionIndex = back
-                    ? (this.suggestionIndex - 1 + n) % n
-                    : (this.suggestionIndex + 1) % n;
+                    ? (this.suggestionIndex < 0 ? n - 1 : Math.floorMod(this.suggestionIndex - 1, n))
+                    : Math.floorMod(this.suggestionIndex + 1, n);
             if (this.suggestionIndex < this.suggestionScroll) {
                 this.suggestionScroll = this.suggestionIndex;
             } else if (this.suggestionIndex >= this.suggestionScroll + SUGGEST_VISIBLE) {

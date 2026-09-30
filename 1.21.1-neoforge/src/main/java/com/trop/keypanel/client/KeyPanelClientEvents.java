@@ -79,7 +79,9 @@ public final class KeyPanelClientEvents {
         if (event.getAction() != GLFW.GLFW_PRESS) {
             return;
         }
-        if (!KeyBindings.OPEN_PANEL.matches(event.getKey(), event.getScanCode())) {
+        // B5：必须连同修饰键一起判定，否则设了 Shift+G 时裸 G 也会开面板
+        if (!KeyCompat.isActiveAndMatches(KeyBindings.OPEN_PANEL,
+                com.mojang.blaze3d.platform.InputConstants.getKey(event.getKey(), event.getScanCode()))) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();

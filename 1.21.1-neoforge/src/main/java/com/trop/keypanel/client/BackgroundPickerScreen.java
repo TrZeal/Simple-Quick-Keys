@@ -68,6 +68,14 @@ public class BackgroundPickerScreen extends Screen {
         files.add("");
         files.addAll(PanelStyle.listImages());
         scroll = Math.max(0, Math.min(maxScroll(), scroll));
+        PanelStyle.clearFailedThumbs();   // 手动刷新时清掉失败记录，给个重试机会（C2）
+    }
+
+    /** 离开界面时释放缩略图纹理，避免显存只增不减（C2）。 */
+    @Override
+    public void removed() {
+        super.removed();
+        PanelStyle.releaseThumbs();
     }
 
     private int maxScroll() {
@@ -97,7 +105,8 @@ public class BackgroundPickerScreen extends Screen {
         } catch (Throwable ignored) {
         }
         status = Component.translatable("key_panel.bg.open_failed", path).getString();
-        com.trop.keypanel.KeyPanelMod.LOGGER.warn("[key_panel] 无法自动打开目录，已复制路径：{}", path);
+        // C4：日志不打本机绝对路径（界面底部的目录提示是刻意引导，保留）
+        com.trop.keypanel.KeyPanelMod.LOGGER.warn("[key_panel] 无法自动打开背景图目录，路径已复制到剪贴板");
     }
 
     private boolean tryDesktop(java.nio.file.Path dir) {
