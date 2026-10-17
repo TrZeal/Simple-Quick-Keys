@@ -71,6 +71,13 @@ public class KeyPickerScreen extends Screen {
      */
     private static final String SRC_MALILIB_OTHER = "malilib:other";
 
+    /**
+     * 左栏第一项「全部」的固定 key（1.2.1）：跨全部来源浏览 / 搜索。
+     * 用 {@code "all:"} 前缀保证与「原版（""）」、「模组分类（category:…）」、「malilib 兜底
+     * （malilib:other）」以及任何真实模组名都不会撞车。
+     */
+    private static final String SRC_ALL = "all:";
+
     /** 模组级分类的串前缀（{@code key.categories.<X>}）；不以此开头的一律当异常串。 */
     private static final String MOD_CATEGORY_PREFIX = "key.categories.";
 
@@ -109,6 +116,11 @@ public class KeyPickerScreen extends Screen {
         final String search;
         /** 原版行的 {@code KeyMapping#getCategory()}（仅 KIND_VANILLA 用）；拆栏只看它，渲染/取值都不变。 */
         final String category;
+        /**
+         * 这一行所属来源的栏名（1.2.1）：{@link #buildSources()} 在分栏完成后回填，
+         * 「全部」栏的全局列表靠它做「来源 · 分类」两级小标题。一行只属于一个来源，因此可以安全回填。
+         */
+        String srcLabel = "";
 
         private Row(int kind, KeyMapping mapping, MalilibHotkeys.Entry hotkey,
                     String text, String mid, String right, String search, String category) {
@@ -205,7 +217,10 @@ public class KeyPickerScreen extends Screen {
     private int panelY;
     private int hovered = -1;
     private boolean draggingBar;
-    /** 左栏当前来源（{@link #SRC_VANILLA} = 原版）；右栏搜索只在当前来源内过滤。 */
+    /**
+     * 左栏当前来源（{@link #SRC_VANILLA} = 原版，{@link #SRC_ALL} = 全部）。
+     * 它决定<b>搜索框为空时</b>右栏列哪一栏；搜索框有词时右栏跨全部来源（见 {@link #applyFilter(String)}）。
+     */
     private String selected = SRC_VANILLA;
     private int srcScroll;
     private int hoveredSource = -1;
@@ -379,6 +394,23 @@ public class KeyPickerScreen extends Screen {
             // 只有 ≥2 个不同分类的模组栏才插小标题（分类名恒为空的「原版键位」栏天然不插）
             src.grouped = hasMultipleGroups(src.rows);
             this.sources.add(src);
+        }
+        // 1.2.1：把栏名回填到每一行上 —— 「全部」栏的全局列表要靠它做「来源 · 分类」两级小标题
+        for (Source src : this.sources) {
+            for (Row row : src.rows) {
+                row.srcLabel = src.label;
+            }
+        }
+        // 1.2.1：在「原版」之上插一栏「全部」（跨全部来源浏览，也是搜索框的落点）。
+        // 只有除原版外还有别的来源时才插：否则它和「原版键位」逐行重复，白占一行。
+        if (this.sources.size() > 1) {
+            Source all = new Source(SRC_ALL,
+                    Component.translatable("key_panel.key.source.all").getString());
+            for (Source src : this.sources) {
+                all.rows.addAll(src.rows);
+            }
+            all.grouped = true;   // 全局列表恒插小标题
+            this.sources.add(0, all);
         }
         // 选中的来源可能已经不在了（malilib 被移除 / 热键改名 / 分类栏名变化）→ 退回原版
         if (findSource(this.selected) == null) {
@@ -917,10 +949,19 @@ public class KeyPickerScreen extends Screen {
         applyFilter(this.search == null ? "" : this.search.getValue());
     }
 
-    /** 来源是否命中搜索词：来源名 / 该来源下任一键位行的搜索串。 */
+    /**
+     * 来源是否命中搜索词：来源名 / 该来源下任一键位行的搜索串。
+     *
+     * <p>1.2.1：「全部」栏握着所有行，<b>不参与行匹配</b> —— 否则左栏搜任何词都会命中它，
+     * 再叠加「选中项被过滤掉就自动选中可见第一项」的规则，会直接把选中项抢成「全部」
+     * （输入 {@code minihud} 却落到「全部」栏）。它只按自己的栏名（全部 / All / all:）匹配。</p>
+     */
     private static boolean sourceMatches(Source src, String q) {
         if (src.key.toLowerCase(Locale.ROOT).contains(q) || src.label.toLowerCase(Locale.ROOT).contains(q)) {
             return true;
+        }
+        if (SRC_ALL.equals(src.key)) {
+            return false;
         }
         for (Row row : src.rows) {
             if (row.search.contains(q)) {
@@ -957,36 +998,70 @@ public class KeyPickerScreen extends Screen {
         return this.sources.isEmpty() ? null : this.sources.get(0);
     }
 
-    /** 切换来源：右栏回到顶部并按「当前来源 + 当前搜索词」重新过滤（左栏滚动位置不动）。 */
+    /**
+     * 切换来源：右栏回到顶部并按「当前来源 + 当前搜索词」重新过滤（左栏滚动位置不动）。
+     *
+     * <p>1.2.1：搜索框是<b>跨全部来源</b>的，所以带着搜索词点时右栏并不会切到这一栏 ——
+     * 先把搜索词清掉再切（responder 会重新过滤），点哪栏就看哪栏，符合直觉。</p>
+     */
     private void selectSource(String key) {
         if (key.equals(this.selected)) {
             return;
         }
         this.selected = key;
         this.scroll = 0;
+        if (this.search != null && !this.search.getValue().isEmpty()) {
+            this.search.setValue("");            // 清空即触发 responder → applyFilter("")
+            return;
+        }
         applyFilter(this.search == null ? "" : this.search.getValue());
     }
 
     /**
-     * 搜索只在当前来源内过滤；结果为空（空来源 / 无匹配）时用一行灰字提示。
+     * 左栏该高亮哪一项：搜索框里有词时，右栏列的是全部来源（见 {@link #applyFilter(String)}），
+     * 所以高亮「全部」；把高亮跟右栏内容对齐，用户才不会以为「搜索被限制在这一栏里」。
+     */
+    private String highlightedSourceKey() {
+        if (this.search != null && !this.search.getValue().trim().isEmpty()
+                && findSource(SRC_ALL) != null) {
+            return SRC_ALL;
+        }
+        return this.selected;
+    }
+
+    /**
+     * 右栏内容 = 「当前该列的那批行」按搜索词过滤，再按分类补小标题。
+     *
+     * <p><b>1.2.1 起搜索框跨全部来源</b>：只要搜索词非空，右栏就列<b>所有来源</b>里命中的行，
+     * 不再只在当前选中的那一栏里找（选了「原版」也能搜到 Tweakeroo 的热键）；左栏选中的是
+     * 「全部」（{@link #SRC_ALL}）时同理，列全部来源。只有「搜索词为空 + 选中的是具体某一栏」
+     * 才按老样子只列那一栏（{@link #globalPool(Source, String)} 决定走哪条路）。</p>
      *
      * <p>1.1.7 起，来源自身有 ≥2 个分类（{@link Source#grouped}）时，右栏在<b>过滤之后</b>按
      * 「相邻同分类」插一行分类小标题（{@link Row#header(String)}）：小标题从过滤结果里现算，
      * 所以某组整组被搜索词滤掉时它的标题自然不出现；小标题只占一行、不可点击、不高亮。
-     * 只按相邻行分组（不重排），栏内行序仍是 {@code options.keyMappings} 原数组顺序。</p>
+     * 只按相邻行分组（不重排），栏内行序仍是 {@code options.keyMappings} 原数组顺序。
+     * 全局列表的小标题写成「来源 · 分类」，一栏一栏分得开。</p>
      */
     private void applyFilter(String query) {
         this.filtered.clear();
         String q = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
         Source src = currentSource();
-        if (src != null) {
+        Source pool = globalPool(src, q);
+        if (pool == null && src != null) {
+            pool = src;                          // 单栏浏览：现算小标题的老路径
+        }
+        if (pool != null) {
+            // 跨来源 = 这批行来自「全部」栏（搜索框有词，或左栏就选中「全部」）；
+            // 不能写成 pool != src —— 直接选中「全部」栏时两者是同一个对象，小标题会退化成单栏格式。
+            boolean global = SRC_ALL.equals(pool.key);
             String group = null;
-            for (Row row : src.rows) {
+            for (Row row : pool.rows) {
                 if (!q.isEmpty() && !row.search.contains(q)) {
                     continue;
                 }
-                if (src.grouped) {
-                    String g = groupHeaderLabel(src.label, row.mid);
+                if (global || pool.grouped) {
+                    String g = global ? globalHeaderLabel(row) : groupHeaderLabel(pool.label, row.mid);
                     if (!g.isEmpty() && !g.equals(group)) {
                         this.filtered.add(Row.header(g));
                         // 1.2.0：只在真的插入小标题时更新 group。旧代码无条件 `group = g`，
@@ -999,8 +1074,46 @@ public class KeyPickerScreen extends Screen {
             }
         }
         if (this.filtered.isEmpty()) {
-            this.filtered.add(Row.notice(Component.translatable("key_panel.key.source.empty").getString()));
+            // 跨来源搜索没命中时说「没有匹配的功能」，比「该来源没有可显示的键位」贴切
+            String key = (src != null && (SRC_ALL.equals(src.key) || !q.isEmpty()))
+                    ? "key_panel.key.search.no_match"
+                    : "key_panel.key.source.empty";
+            this.filtered.add(Row.notice(Component.translatable(key).getString()));
         }
+    }
+
+    /**
+     * 这一轮要列哪张行表：跨来源（搜索词非空，或左栏正选中「全部」）返回「全部」栏；
+     * 否则返回 {@code null} 表示按「当前选中的那一栏」处理。
+     *
+     * <p>没有模组、因而没插「全部」栏时退化成当前栏 —— 那时两者内容本来就一样。</p>
+     */
+    private Source globalPool(Source current, String q) {
+        if (current == null) {
+            return null;
+        }
+        if (SRC_ALL.equals(current.key)) {
+            return current;
+        }
+        if (q.isEmpty()) {
+            return null;
+        }
+        Source all = findSource(SRC_ALL);
+        return all != null ? all : current;
+    }
+
+    /**
+     * 全局列表的小标题：{@code 来源 · 分类}（原版行没有分类列，只显示来源名）。
+     * 分类那截仍走 {@link #groupHeaderLabel(String, String)} —— 分类名开头就是来源名时会被削掉，
+     * 避免出现「Tweakeroo · Tweakeroo / Generic」这种重复。
+     */
+    private static String globalHeaderLabel(Row row) {
+        String srcLabel = row.srcLabel == null ? "" : row.srcLabel;
+        String cat = groupHeaderLabel(srcLabel, row.mid);
+        if (cat.isEmpty()) {
+            return srcLabel;
+        }
+        return srcLabel.isEmpty() ? cat : srcLabel + " · " + cat;
     }
 
     private int listLeft() {
@@ -1210,7 +1323,7 @@ public class KeyPickerScreen extends Screen {
             }
             Source src = this.visibleSources.get(idx);
             int y = top + i * ROW_H;
-            boolean sel = src.key.equals(this.selected);
+            boolean sel = src.key.equals(this.highlightedSourceKey());
             boolean hover = mouseX >= x && mouseX < x + SRC_W && mouseY >= y && mouseY < y + ROW_H;
             if (hover) {
                 this.hoveredSource = idx;

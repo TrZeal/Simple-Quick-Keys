@@ -12,6 +12,7 @@
 - **Trigger anything**: click a slot to fire it, no keybind required; hold-type actions such as sneaking or sprinting become toggles
 - **Hotkeys from other mods**: if you run mods such as Tweakeroo, MiniHUD or Litematica, their hotkeys appear in the key picker and the panel triggers the feature itself; with none of them installed the picker simply shows what the game has
 - **Key picker**: sources are listed in a column on the left (vanilla first, then one entry per mod) with its own search box; functions on the right sit under category headings, and a slot bound to a hotkey shows that feature's name
+- **All sources + cross-source search**: an **All** entry at the top of the source column, and the search box on the right looks through **every source at once**, grouping hits by source and category
 - **Commands and icons**: each slot can hold one command (run first, with chat-style completion) and use any item as its icon
 - **Make it yours**: tint the whole panel and every slot (R / G / B plus opacity), and use your own image as the background
 - **Client-side only**: works in singleplayer and on any server, nothing to install on the server
@@ -42,7 +43,11 @@ Click the **`edit`** button at the bottom of the panel to open the edit strip be
 
 ### Using hotkeys from other mods
 
-Open a slot for editing, click **"Pick key"**, then pick the mod's entry in the **Source** column on the left (or type in its search box). The list on the right shows that mod's functions grouped by category; click one to fill the slot being edited. When the source is a malilib-based mod (Tweakeroo, MiniHUD, Litematica ...), clicking that slot later runs the feature directly — no key has to be assigned to it.
+Open a slot for editing, click **"Pick key"**, then pick the mod's entry in the **Source** column on the left (or type in its search box). The list on the right shows that mod's functions grouped by category; click one to fill the slot being edited.
+
+To find a function without picking a mod first, type in the search box on the right (it searches every source); the **All** entry shows everything at once.
+
+When the source is a malilib-based mod (Tweakeroo, MiniHUD, Litematica ...), clicking that slot later runs the feature directly — no key has to be assigned to it.
 
 ### Files
 
@@ -62,7 +67,7 @@ Everything lives in `config/key_panel/`:
 
 ## Versions and requirements
 
-Current version: **1.2.0**
+Current version: **1.2.1**
 
 | Minecraft | Loader | Java |
 |---|---|---|

@@ -3,3 +3,7 @@ build/
 run/
 .idea/
 *.iml
+
+# 本地测试日志（不进仓库）
+logs/
+*.log.gz

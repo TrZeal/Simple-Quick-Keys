@@ -18,3 +18,7 @@ runs/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 本地测试日志（不进仓库）
+logs/
+*.log.gz
