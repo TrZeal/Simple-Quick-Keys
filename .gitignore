@@ -16,3 +16,8 @@ tmp/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 本机备份与测试日志（不进仓库）
+*.bak
+logs/
+*.log.gz
